@@ -5,6 +5,7 @@ from search import smart_search
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from upstash_vector import Index
+from automation import GameAgent
 
 app = FastAPI()
 
@@ -526,6 +527,7 @@ async def root():
 @app.post("/chat")
 async def chat(request: Request):
     try:
+        game_agent = GameAgent()
         data = await request.json()
         messages = data.get("messages", [])
         file_content = data.get("file_content")
@@ -590,3 +592,16 @@ async def chat(request: Request):
             "content": f"Fallo en el Nexo: {str(e)}",
             "used_search": False, "used_file": False, "used_memory": False
         })
+# ... (toda tu lógica anterior de búsqueda y archivos)
+
+# --- DETECCIÓN DE COMANDOS DE JUEGO ---
+game_ctx = ""
+if "rollercoin" in user_query.lower() or "juego" in user_query.lower():
+    status = game_agent.get_status()
+    game_ctx = f"\n[SISTEMA DE JUEGO]: {status}"
+
+# Actualiza el System Prompt para incluir el contexto de juego
+messages.insert(0, {
+    "role": "system", 
+    "content": personality.get_system_prompt(mem_ctx, file_ctx, web_ctx) + game_ctx
+})
