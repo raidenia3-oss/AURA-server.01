@@ -5,12 +5,12 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 app = FastAPI()
 
-# Tu llave que ya configuraste en las variables de Vercel
+# Esta es la llave que ya pusiste en Vercel
 OR_KEY = os.environ.get("OPENROUTER_API_KEY")
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
-    return "<h1>AURA Online - Sistema Listo</h1>"
+    return "<h1>AURA Online - Sistema Operativo Listo</h1>"
 
 @app.post("/api/chat")
 async def chat(request: Request):
@@ -18,6 +18,7 @@ async def chat(request: Request):
         data = await request.json()
         messages = data.get("messages", [])
         
+        # Conexión directa con la IA
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={"Authorization": f"Bearer {OR_KEY}"},
