@@ -1,5 +1,6 @@
 import os
 import requests
+import personality
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from upstash_vector import Index
@@ -18,7 +19,6 @@ except Exception:
 
 OR_KEY = os.environ.get("OPENROUTER_API_KEY")
 
-# --- BUSQUEDA DUCKDUCKGO (sin API key, gratis) ---
 def web_search(query: str) -> str:
     try:
         with DDGS() as ddgs:
@@ -27,10 +27,11 @@ def web_search(query: str) -> str:
         for r in results:
             summary += f"\n[Web] {r.get('title')}: {r.get('body')}"
         return summary
-    except Exception as e:
+    except:
         return ""
 
-# --- INTERFAZ VISUAL ---
+# Copia aquí el bloque HTML_CHAT que pasaste (es muy bueno y funciona bien)
+# Solo asegúrate de pegarlo sin puntos rojos.
 HTML_CHAT = """
 <!DOCTYPE html>
 <html>
@@ -55,18 +56,15 @@ HTML_CHAT = """
         button.active { background: #ff4444; color: #fff; }
         #file-area { width:100%; display:flex; gap:8px; align-items:center; }
         #file-name { font-size:11px; color:#555; }
-        .tag { font-size:10px; padding:2px 6px; border:1px solid #333; color:#555; margin-left:5px; }
-        .tag.search { border-color:#0066ff; color:#0066ff; }
-        .tag.file { border-color:#ff6600; color:#ff6600; }
     </style>
 </head>
 <body>
     <div id="header">
         <span>AURA SYSTEM v3.1</span>
-        <span id="status">● STANDBY</span>
+        <div id="status">● STANDBY</div>
     </div>
     <div id="chat">
-        <div class="msg system">Sistema iniciado. Sin límites de búsqueda. DuckDuckGo activo.</div>
+        <div class="msg system">Vínculo establecido. Fase 1, 2 y 5 activas.</div>
     </div>
     <div id="input-area">
         <div id="file-area">
@@ -75,7 +73,7 @@ HTML_CHAT = """
             <span id="file-name">Sin archivo</span>
             <button id="clearFile" onclick="clearFile()" style="display:none; background:#111; color:#ff4444; border:1px solid #ff4444; padding:5px 10px;">✕</button>
         </div>
-        <input type="text" id="msgInput" placeholder="Ordenes... (usa 'busca:' para búsqueda web)" onkeypress="if(event.key==='Enter') send()">
+        <input type="text" id="msgInput" placeholder="Ordenes... (usa 'busca:' para red)" onkeypress="if(event.key==='Enter') send()">
         <button onclick="send()">EJECUTAR</button>
         <button id="voiceBtn" onclick="toggleVoice()">🎤 VOZ</button>
     </div>
@@ -97,7 +95,6 @@ HTML_CHAT = """
                 fileName = file.name;
                 document.getElementById('file-name').textContent = '📄 ' + fileName;
                 document.getElementById('clearFile').style.display = 'inline';
-                addMsg('system', `Archivo cargado: ${fileName} (${fileContent.length} caracteres)`);
             };
             reader.readAsText(file);
         }
@@ -111,29 +108,20 @@ HTML_CHAT = """
         }
 
         function toggleVoice() {
-            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                alert('Usa Chrome para reconocimiento de voz.');
-                return;
-            }
+            if (!('webkitSpeechRecognition' in window)) { alert('Usa Chrome'); return; }
             if (isListening) { recognition.stop(); return; }
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            recognition = new SpeechRecognition();
+            recognition = new webkitSpeechRecognition();
             recognition.lang = 'es-ES';
-            recognition.onstart = () => {
-                isListening = true;
+            recognition.onstart = () => { 
+                isListening = true; 
                 document.getElementById('voiceBtn').classList.add('active');
-                document.getElementById('voiceBtn').textContent = '🔴 ESCUCHANDO';
-                status.textContent = '● ESCUCHANDO...';
-                status.className = 'active';
+                status.textContent = '● ESCUCHANDO';
             };
-            recognition.onresult = (e) => {
-                input.value = e.results[0][0].transcript;
-                send();
-            };
-            recognition.onend = () => {
-                isListening = false;
+            recognition.onresult = (e) => { input.value = e.results[0][0].transcript; send(); };
+            recognition.onend = () => { 
+                isListening = false; 
                 document.getElementById('voiceBtn').classList.remove('active');
-                document.getElementById('voiceBtn').textContent = '🎤 VOZ';
+                status.textContent = '● STANDBY';
             };
             recognition.start();
         }
@@ -141,30 +129,18 @@ HTML_CHAT = """
         function speak(text) {
             if (!('speechSynthesis' in window)) return;
             window.speechSynthesis.cancel();
-            const clean = text.replace(/\[.*?\]/g, '').replace(/[*#`]/g, '').substring(0, 300);
-            const utt = new SpeechSynthesisUtterance(clean);
+            const utt = new SpeechSynthesisUtterance(text.replace(/[*#`]/g, '').substring(0, 250));
             utt.lang = 'es-ES';
-            utt.rate = 1.1;
-            const voices = window.speechSynthesis.getVoices();
-            const femVoice = voices.find(v => v.lang.startsWith('es') && (v.name.includes('Paulina') || v.name.includes('Monica') || v.name.includes('Laura')))
-                          || voices.find(v => v.lang.startsWith('es'));
-            if (femVoice) utt.voice = femVoice;
-            utt.onstart = () => { status.textContent = '● HABLANDO'; status.className = 'active'; };
-            utt.onend = () => { status.textContent = '● STANDBY'; status.className = ''; };
             window.speechSynthesis.speak(utt);
         }
 
-        function addMsg(type, text, tags=[]) {
+        function addMsg(type, text, used_search, used_file) {
             const div = document.createElement('div');
             div.className = 'msg ' + type;
-            let tagsHtml = tags.map(t => `<span class="tag ${t.cls}">${t.label}</span>`).join('');
-            if (type === 'aura') {
-                div.innerHTML = `<b>AURA:</b>${tagsHtml}<br>${text.replace(/\n/g, '<br>')}`;
-            } else if (type === 'user') {
-                div.innerHTML = `<b>Raiden:</b><br>${text}`;
-            } else {
-                div.textContent = text;
-            }
+            let meta = "";
+            if(used_search) meta += " <small style='color:#0066ff'>[🌐 Red]</small>";
+            if(used_file) meta += " <small style='color:#ff6600'>[📄 Archivo]</small>";
+            div.innerHTML = `<b>${type === 'aura' ? 'AURA' : 'Raiden'}:</b>${meta}<br>${text}`;
             chat.appendChild(div);
             chat.scrollTop = chat.scrollHeight;
         }
@@ -173,11 +149,9 @@ HTML_CHAT = """
             const val = input.value.trim();
             if (!val) return;
             input.value = '';
-            let displayText = val;
-            if (fileName) displayText += ` [📄 ${fileName}]`;
-            addMsg('user', displayText);
+            addMsg('user', val + (fileName ? ` (Doc: ${fileName})` : ''), false, false);
             status.textContent = '● PROCESANDO';
-            status.className = 'active';
+            
             try {
                 const res = await fetch('/chat', {
                     method: 'POST',
@@ -189,19 +163,11 @@ HTML_CHAT = """
                     })
                 });
                 const data = await res.json();
-                const tags = [];
-                if (data.used_search) tags.push({cls:'search', label:'🌐 DDG'});
-                if (data.used_file) tags.push({cls:'file', label:'📄 ARCHIVO'});
-                addMsg('aura', data.content, tags);
+                addMsg('aura', data.content, data.used_search, data.used_file);
                 speak(data.content);
-            } catch(e) {
-                addMsg('system', 'Error de conexión: ' + e.message);
-            }
+            } catch(e) { addMsg('aura', 'Error de conexión nuclear.', false, false); }
             status.textContent = '● STANDBY';
-            status.className = '';
         }
-
-        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
     </script>
 </body>
 </html>
@@ -223,66 +189,46 @@ async def chat(request: Request):
         used_search = False
         used_file = False
 
-        # --- CONTEXTO DE ARCHIVO ---
+        # Contexto de Archivo
         file_ctx = ""
-        if file_content and file_name:
+        if file_content:
             used_file = True
-            file_ctx = f"\n\n[ARCHIVO ADJUNTO: {file_name}]\n```\n{file_content[:8000]}\n```"
+            file_ctx = f"\n[Lectura de Archivo {file_name}]:\n{file_content[:5000]}"
 
-        # --- MEMORIA VECTORIAL ---
+        # Búsqueda Web
+        web_ctx = ""
+        keywords = ["busca:", "qué es", "precio", "noticias", "error", "actual"]
+        if any(k in user_query.lower() for k in keywords):
+            used_search = True
+            web_ctx = web_search(user_query.replace("busca:", ""))
+
+        # Memoria
         mem_ctx = ""
         if vector_index:
             try:
-                search = vector_index.query(data=user_query, top_k=2, include_metadata=True)
-                for item in search:
-                    mem_ctx += f"\n[Memoria: {item.metadata.get('res')}]"
-            except:
-                pass
+                search = vector_index.query(data=user_query, top_k=1, include_metadata=True)
+                for item in search: mem_ctx = f"\n[Memoria]: {item.metadata.get('res')}"
+            except: pass
 
-        # --- BUSQUEDA WEB AUTOMATICA ---
-        web_ctx = ""
-        keywords = ["busca:", "buscar", "qué es", "que es", "cómo", "como", "precio",
-                    "noticias", "hoy", "actual", "último", "ultimo", "2024", "2025", "2026",
-                    "error", "solución", "solucion", "tutorial", "github", "cuánto", "cuanto"]
-        should_search = any(k in user_query.lower() for k in keywords) or user_query.lower().startswith("busca:")
-        clean_query = user_query.replace("busca:", "").strip()
-
-        if should_search:
-            web_ctx = web_search(clean_query)
-            if web_ctx:
-                used_search = True
-
-        # --- PROMPT DE SISTEMA ---
-        sys_msg = {
-            "role": "system",
-            "content": f"Eres AURA, IA personal de Raiden (estilo Cortana/Jarvis). Experta en C++, tecnología y hardware. Habla español, sé concisa y directa.{mem_ctx}{file_ctx}{web_ctx}"
-        }
-        messages.insert(0, sys_msg)
+        # Inyectar prompt de sistema modular
+        messages.insert(0, {"role": "system", "content": personality.get_system_prompt(mem_ctx, file_ctx, web_ctx)})
 
         res = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OR_KEY}",
-                "HTTP-Referer": "https://aura-server-01.vercel.app",
-                "X-Title": "AURA"
-            },
+            headers={"Authorization": f"Bearer {OR_KEY}"},
             json={"model": "openrouter/free", "messages": messages},
-            timeout=20
+            timeout=25
         )
 
         ans_raw = res.json()
-        if 'choices' not in ans_raw:
-            return JSONResponse(status_code=500, content={"content": f"[ERROR API]: {ans_raw}", "used_search": False, "used_file": False})
-
         ans = ans_raw['choices'][0]['message']['content']
 
+        # Guardar en memoria
         if vector_index:
-            try:
-                vector_index.upsert(vectors=[(f"msg_{os.urandom(4).hex()}", user_query, {"res": ans})])
-            except:
-                pass
+            try: vector_index.upsert(vectors=[(f"msg_{os.urandom(2).hex()}", user_query, {"res": ans})])
+            except: pass
 
         return {"content": ans, "used_search": used_search, "used_file": used_file}
 
     except Exception as e:
-        return JSONResponse(status_code=500, content={"content": f"[EXCEPCION]: {str(e)}", "used_search": False, "used_file": False})
+        return JSONResponse(status_code=500, content={"content": f"Fallo en el Nexo: {str(e)}"})
