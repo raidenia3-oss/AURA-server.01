@@ -11,7 +11,7 @@ vector_index = Index(
     url=os.environ.get("UPSTASH_VECTOR_REST_URL"), 
     token=os.environ.get("UPSTASH_VECTOR_REST_TOKEN")
 )
-OR_KEY = os.environ.get("OR_KEY")
+OR_KEY = os.environ.get("OPENROUTER_API_KEY")
 
 # --- INTERFAZ VISUAL (El chat que te faltaba) ---
 HTML_CHAT = """
