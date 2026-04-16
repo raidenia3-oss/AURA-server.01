@@ -91,6 +91,37 @@ async def chat(request: Request):
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {OR_KEY}",
+                "HTTP-Referer": "https://aura-server-01.vercel.app",  # FIX 1: header requerido
+                "X-Title": "AURA"
+            },
+            json={
+                "model": "meta-llama/llama-3.3-70b-instruct:free",  # FIX 2: modelo actualizado
+                "messages": messages
+            },
+            timeout=15
+        )
+
+        ans_raw = res.json()
+        if 'choices' not in ans_raw:  # FIX 3: validacion antes de parsear
+            return JSONResponse(status_code=500, content={"content": f"[ERROR API]: {ans_raw}"})
+
+        ans = ans_raw['choices'][0]['message']['content']
+
+        if vector_index:
+            try:
+                vector_index.upsert(vectors=[(f"msg_{os.urandom(4).hex()}", user_query, {"res": ans})])
+            except:
+                pass
+
+        return {"content": ans}
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"content": f"[EXCEPCION]: {str(e)}"})        messages.insert(0, sys_msg)
+
+        res = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OR_KEY}",
                 "HTTP-Referer": "https://aura-server-01.vercel.app",
                 "X-Title": "AURA"
             },
