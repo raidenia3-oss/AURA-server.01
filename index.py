@@ -18,7 +18,9 @@ except Exception:
     vector_index = None
 
 OR_KEY = os.environ.get("OPENROUTER_API_KEY")
+GOOGLE_KEY = os.environ.get("GOOGLE_API_KEY")  # aistudio.google.com (gratis)
 
+# --- BUSQUEDA DUCKDUCKGO ---
 def web_search(query: str) -> str:
     try:
         with DDGS() as ddgs:
@@ -27,11 +29,54 @@ def web_search(query: str) -> str:
         for r in results:
             summary += f"\n[Web] {r.get('title')}: {r.get('body')}"
         return summary
-    except:
-        return ""
+    except Exception as e:
+        return f"\n[Web Error]: {str(e)}"
 
-# Copia aquí el bloque HTML_CHAT que pasaste (es muy bueno y funciona bien)
-# Solo asegúrate de pegarlo sin puntos rojos.
+# --- LLAMADA AL MODELO (OpenRouter -> Gemma fallback) ---
+def call_llm(messages: list) -> str:
+    # Intento 1: OpenRouter
+    if OR_KEY:
+        try:
+            res = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OR_KEY}",
+                    "HTTP-Referer": "https://aura-server-01.vercel.app",
+                    "X-Title": "AURA"
+                },
+                json={"model": "openrouter/free", "messages": messages},
+                timeout=20
+            )
+            ans_raw = res.json()
+            if 'choices' in ans_raw:
+                return ans_raw['choices'][0]['message']['content']
+        except:
+            pass
+
+    # Intento 2: Gemma directo via Google AI Studio
+    if GOOGLE_KEY:
+        try:
+            google_messages = [
+                {"role": m["role"] if m["role"] != "system" else "user", "parts": [{"text": m["content"]}]}
+                for m in messages if m["role"] != "system"
+            ]
+            system_text = next((m["content"] for m in messages if m["role"] == "system"), "")
+            res = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key={GOOGLE_KEY}",
+                json={
+                    "system_instruction": {"parts": [{"text": system_text}]},
+                    "contents": google_messages
+                },
+                timeout=20
+            )
+            data = res.json()
+            return data["candidates"][0]["content"]["parts"][0]["text"]
+        except:
+            pass
+
+    return "[ERROR]: Todos los modelos fallaron."
+
+# --- HTML ---
 HTML_CHAT = """
 <!DOCTYPE html>
 <html>
@@ -60,11 +105,11 @@ HTML_CHAT = """
 </head>
 <body>
     <div id="header">
-        <span>AURA SYSTEM v3.1</span>
+        <span>AURA SYSTEM v3.2</span>
         <div id="status">● STANDBY</div>
     </div>
     <div id="chat">
-        <div class="msg system">Vínculo establecido. Fase 1, 2 y 5 activas.</div>
+        <div class="msg system">Vínculo establecido. Fases 1, 2 y 5 activas. Motor dual: OpenRouter + Gemma.</div>
     </div>
     <div id="input-area">
         <div id="file-area">
@@ -81,10 +126,7 @@ HTML_CHAT = """
         const chat = document.getElementById('chat');
         const input = document.getElementById('msgInput');
         const status = document.getElementById('status');
-        let fileContent = null;
-        let fileName = null;
-        let isListening = false;
-        let recognition = null;
+        let fileContent = null, fileName = null, isListening = false, recognition = null;
 
         function handleFile() {
             const file = document.getElementById('fileInput').files[0];
@@ -95,33 +137,38 @@ HTML_CHAT = """
                 fileName = file.name;
                 document.getElementById('file-name').textContent = '📄 ' + fileName;
                 document.getElementById('clearFile').style.display = 'inline';
+                addMsg('system', `Archivo cargado: ${fileName}`);
             };
             reader.readAsText(file);
         }
 
         function clearFile() {
-            fileContent = null;
-            fileName = null;
+            fileContent = null; fileName = null;
             document.getElementById('file-name').textContent = 'Sin archivo';
             document.getElementById('clearFile').style.display = 'none';
             document.getElementById('fileInput').value = '';
         }
 
         function toggleVoice() {
-            if (!('webkitSpeechRecognition' in window)) { alert('Usa Chrome'); return; }
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                alert('Usa Chrome para voz.'); return;
+            }
             if (isListening) { recognition.stop(); return; }
-            recognition = new webkitSpeechRecognition();
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SR();
             recognition.lang = 'es-ES';
-            recognition.onstart = () => { 
-                isListening = true; 
+            recognition.onstart = () => {
+                isListening = true;
                 document.getElementById('voiceBtn').classList.add('active');
-                status.textContent = '● ESCUCHANDO';
+                document.getElementById('voiceBtn').textContent = '🔴 ESCUCHANDO';
+                status.textContent = '● ESCUCHANDO'; status.className = 'active';
             };
             recognition.onresult = (e) => { input.value = e.results[0][0].transcript; send(); };
-            recognition.onend = () => { 
-                isListening = false; 
+            recognition.onend = () => {
+                isListening = false;
                 document.getElementById('voiceBtn').classList.remove('active');
-                status.textContent = '● STANDBY';
+                document.getElementById('voiceBtn').textContent = '🎤 VOZ';
+                status.textContent = '● STANDBY'; status.className = '';
             };
             recognition.start();
         }
@@ -129,18 +176,25 @@ HTML_CHAT = """
         function speak(text) {
             if (!('speechSynthesis' in window)) return;
             window.speechSynthesis.cancel();
-            const utt = new SpeechSynthesisUtterance(text.replace(/[*#`]/g, '').substring(0, 250));
-            utt.lang = 'es-ES';
+            const utt = new SpeechSynthesisUtterance(text.replace(/[*#`]/g, '').substring(0, 300));
+            utt.lang = 'es-ES'; utt.rate = 1.1;
+            const voices = window.speechSynthesis.getVoices();
+            const v = voices.find(v => v.lang.startsWith('es') && (v.name.includes('Paulina') || v.name.includes('Monica') || v.name.includes('Laura')))
+                   || voices.find(v => v.lang.startsWith('es'));
+            if (v) utt.voice = v;
+            utt.onstart = () => { status.textContent = '● HABLANDO'; status.className = 'active'; };
+            utt.onend = () => { status.textContent = '● STANDBY'; status.className = ''; };
             window.speechSynthesis.speak(utt);
         }
 
         function addMsg(type, text, used_search, used_file) {
             const div = document.createElement('div');
             div.className = 'msg ' + type;
-            let meta = "";
-            if(used_search) meta += " <small style='color:#0066ff'>[🌐 Red]</small>";
-            if(used_file) meta += " <small style='color:#ff6600'>[📄 Archivo]</small>";
-            div.innerHTML = `<b>${type === 'aura' ? 'AURA' : 'Raiden'}:</b>${meta}<br>${text}`;
+            let meta = '';
+            if (used_search) meta += " <small style='color:#0066ff'>[🌐 Red]</small>";
+            if (used_file) meta += " <small style='color:#ff6600'>[📄 Archivo]</small>";
+            if (type === 'system') { div.textContent = text; }
+            else { div.innerHTML = `<b>${type === 'aura' ? 'AURA' : 'Raiden'}:</b>${meta}<br>${text.replace(/\\n/g,'<br>')}`; }
             chat.appendChild(div);
             chat.scrollTop = chat.scrollHeight;
         }
@@ -150,24 +204,21 @@ HTML_CHAT = """
             if (!val) return;
             input.value = '';
             addMsg('user', val + (fileName ? ` (Doc: ${fileName})` : ''), false, false);
-            status.textContent = '● PROCESANDO';
-            
+            status.textContent = '● PROCESANDO'; status.className = 'active';
             try {
                 const res = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        messages: [{ role: 'user', content: val }],
-                        file_content: fileContent,
-                        file_name: fileName
-                    })
+                    body: JSON.stringify({ messages: [{ role: 'user', content: val }], file_content: fileContent, file_name: fileName })
                 });
                 const data = await res.json();
                 addMsg('aura', data.content, data.used_search, data.used_file);
                 speak(data.content);
-            } catch(e) { addMsg('aura', 'Error de conexión nuclear.', false, false); }
-            status.textContent = '● STANDBY';
+            } catch(e) { addMsg('system', 'Error de conexión: ' + e.message); }
+            status.textContent = '● STANDBY'; status.className = '';
         }
+
+        window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
     </script>
 </body>
 </html>
@@ -189,46 +240,53 @@ async def chat(request: Request):
         used_search = False
         used_file = False
 
-        # Contexto de Archivo
+        # Archivo
         file_ctx = ""
         if file_content:
             used_file = True
-            file_ctx = f"\n[Lectura de Archivo {file_name}]:\n{file_content[:5000]}"
-
-        # Búsqueda Web
-        web_ctx = ""
-        keywords = ["busca:", "qué es", "precio", "noticias", "error", "actual"]
-        if any(k in user_query.lower() for k in keywords):
-            used_search = True
-            web_ctx = web_search(user_query.replace("busca:", ""))
+            file_ctx = f"\n[Archivo: {file_name}]:\n{file_content[:5000]}"
 
         # Memoria
         mem_ctx = ""
         if vector_index:
             try:
-                search = vector_index.query(data=user_query, top_k=1, include_metadata=True)
-                for item in search: mem_ctx = f"\n[Memoria]: {item.metadata.get('res')}"
-            except: pass
+                result = vector_index.query(data=user_query, top_k=1, include_metadata=True)
+                for item in result:
+                    mem_ctx = f"\n[Memoria]: {item.metadata.get('res')}"
+            except:
+                pass
 
-        # Inyectar prompt de sistema modular
-        messages.insert(0, {"role": "system", "content": personality.get_system_prompt(mem_ctx, file_ctx, web_ctx)})
+        # Búsqueda web - keywords expandidas (FIX PRINCIPAL)
+        web_ctx = ""
+        keywords = [
+            "busca:", "buscar", "qué es", "que es", "cómo", "como",
+            "precio", "noticia", "noticias", "hoy", "actual", "último",
+            "ultimo", "2024", "2025", "2026", "error", "solución",
+            "solucion", "tutorial", "github", "cuánto", "cuanto",
+            "quién", "quien", "dónde", "donde", "cuándo", "cuando",
+            "importante", "reciente", "nuevo", "nueva", "lanzó", "lanzo"
+        ]
+        if any(k in user_query.lower() for k in keywords):
+            web_ctx = web_search(user_query.replace("busca:", "").strip())
+            if web_ctx and "[Web Error]" not in web_ctx:
+                used_search = True
 
-        res = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={"Authorization": f"Bearer {OR_KEY}"},
-            json={"model": "openrouter/free", "messages": messages},
-            timeout=25
-        )
+        # Sistema
+        messages.insert(0, {
+            "role": "system",
+            "content": personality.get_system_prompt(mem_ctx, file_ctx, web_ctx)
+        })
 
-        ans_raw = res.json()
-        ans = ans_raw['choices'][0]['message']['content']
+        ans = call_llm(messages)
 
         # Guardar en memoria
         if vector_index:
-            try: vector_index.upsert(vectors=[(f"msg_{os.urandom(2).hex()}", user_query, {"res": ans})])
-            except: pass
+            try:
+                vector_index.upsert(vectors=[(f"msg_{os.urandom(2).hex()}", user_query, {"res": ans})])
+            except:
+                pass
 
         return {"content": ans, "used_search": used_search, "used_file": used_file}
 
     except Exception as e:
-        return JSONResponse(status_code=500, content={"content": f"Fallo en el Nexo: {str(e)}"})
+        return JSONResponse(status_code=500, content={"content": f"Fallo en el Nexo: {str(e)}", "used_search": False, "used_file": False})
