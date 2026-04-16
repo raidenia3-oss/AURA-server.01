@@ -39,7 +39,7 @@ HTML_CHAT = """
     <div style="text-align:center; padding:10px; border-bottom:1px solid #333;">AURA SYSTEM v2.7</div>
     <div id="chat"></div>
     <div id="input-area">
-        <input type="text" id="msgInput" placeholder="Ordenes..." onkeypress="if(event.key==='Enter') send()">
+        <input type="text" id="msgInput" placeholder="Esperando órdenes..." onkeypress="if(event.key==='Enter') send()">
         <button onclick="send()">EJECUTAR</button>
     </div>
     <script>
@@ -51,14 +51,16 @@ HTML_CHAT = """
             chat.innerHTML += `<div class="msg user"><b>Raiden:</b><br>${val}</div>`;
             input.value = '';
             chat.scrollTop = chat.scrollHeight;
-            const res = await fetch('/chat', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({messages: [{role: 'user', content: val}]})
-            });
-            const data = await res.json();
-            chat.innerHTML += `<div class="msg aura"><b>AURA:</b><br>${data.content}</div>`;
-            chat.scrollTop = chat.scrollHeight;
+            try {
+                const res = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({messages: [{role: 'user', content: val}]})
+                });
+                const data = await res.json();
+                chat.innerHTML += `<div class="msg aura"><b>AURA:</b><br>${data.content}</div>`;
+                chat.scrollTop = chat.scrollHeight;
+            } catch(e) { chat.innerHTML += `<div class="msg aura">[ERROR EN EL NEXO]</div>`; }
         }
     </script>
 </body>
@@ -81,43 +83,30 @@ async def chat(request: Request):
             try:
                 search = vector_index.query(data=user_query, top_k=2, include_metadata=True)
                 for item in search:
-                    ctx += f"\n[Memoria: {item.metadata.get('res')}]"
-            except:
-                pass
+                    ctx += f"\\n[Memoria: {item.metadata.get('res')}]"
+            except: pass
 
         sys_msg = {
             "role": "system",
-            "content": f"Eres AURA, IA de Raiden (Cortana/Jarvis). Experta en C++. Habla español. {ctx}"
+            "content": f"Eres AURA, IA de Raiden (fusión Cortana/Jarvis). Experta en C++ y sistemas. Habla español. {ctx}"
         }
         messages.insert(0, sys_msg)
 
         res = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OR_KEY}",
-                "HTTP-Referer": "https://aura-server-01.vercel.app",
-                "X-Title": "AURA"
-            },
-            json={
-                "model": "openrouter/free",  # Auto-elige el mejor modelo gratuito disponible
-                "messages": messages
-            },
+            headers={"Authorization": f"Bearer {OR_KEY}"},
+            json={"model": "meta-llama/llama-3.1-8b-instruct:free", "messages": messages},
             timeout=15
         )
-
+        
         ans_raw = res.json()
-        if 'choices' not in ans_raw:
-            return JSONResponse(status_code=500, content={"content": f"[ERROR API]: {ans_raw}"})
-
         ans = ans_raw['choices'][0]['message']['content']
 
         if vector_index:
             try:
                 vector_index.upsert(vectors=[(f"msg_{os.urandom(4).hex()}", user_query, {"res": ans})])
-            except:
-                pass
+            except: pass
 
         return {"content": ans}
-
     except Exception as e:
-        return JSONResponse(status_code=500, content={"content": f"[EXCEPCION]: {str(e)}"})
+        return JSONResponse(status_code=500, content={"content": f"Error: {str(e)}"})
