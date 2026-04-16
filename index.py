@@ -6,7 +6,7 @@ from upstash_vector import Index
 
 app = FastAPI()
 
-# --- CONFIGURACIÓN ---
+# --- CONFIGURACION ---
 vector_index = Index(
     url=os.environ.get("UPSTASH_VECTOR_REST_URL"), 
     token=os.environ.get("UPSTASH_VECTOR_REST_TOKEN")
@@ -23,7 +23,7 @@ HTML_CHAT = """
     <title>AURA CORE</title>
     <style>
         body { background: #0a0a0a; color: #00ff41; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        #chat { flex: 1; overflow-y: auto; padding: 15px; border-bottom: 1px solid #1a1a1a; }
+        #chat { flex: 1; overflow-y: auto; padding: 15px; border-bottom: 1px solid #1a1a1a; display: flex; flex-direction: column; }
         .msg { margin: 10px 0; padding: 10px; border-radius: 5px; max-width: 85%; line-height: 1.4; }
         .user { align-self: flex-end; background: #002200; border: 1px solid #00ff41; margin-left: auto; color: #fff; }
         .aura { align-self: flex-start; background: #111; border: 1px solid #00ff41; }
@@ -34,7 +34,7 @@ HTML_CHAT = """
 </head>
 <body>
     <div style="text-align:center; padding:10px; border-bottom:1px solid #333;">AURA SYSTEM v2.7 [CORTANA/JARVIS]</div>
-    <div id="chat" style="display: flex; flex-direction: column;"></div>
+    <div id="chat"></div>
     <div id="input-area">
         <input type="text" id="msgInput" placeholder="Esperando órdenes..." onkeypress="if(event.key==='Enter') send()">
         <button onclick="send()">EJECUTAR</button>
@@ -85,7 +85,7 @@ async def chat(request: Request):
 
         system_prompt = {
             "role": "system",
-            "content": f"Eres AURA, IA de Raiden (Cortana/Jarvis). Experta en C++ y sistemas. Habla en español. Contexto: {memoria_contexto}"
+            "content": f"Eres AURA, IA de Raiden (fusión Cortana/Jarvis). Experta en C++ y sistemas. Habla en español. Contexto recordado: {memoria_contexto}"
         }
         messages.insert(0, system_prompt)
 
