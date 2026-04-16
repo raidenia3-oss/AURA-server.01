@@ -99,7 +99,7 @@ async def chat(request: Request):
                 "X-Title": "AURA"
             },
             json={
-                "model": "deepseek/deepseek-chat:free",
+                "model": "openrouter/free",  # Auto-elige el mejor modelo gratuito disponible
                 "messages": messages
             },
             timeout=15
