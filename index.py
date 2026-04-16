@@ -115,7 +115,7 @@ async def chat(request: Request):
                 "X-Title": "AURA CORE"
             },
             json={
-                "model": "google/gemma-2-9b-it:free", # <--- Modelo gratuito y estable
+                "model": "meta-llama/llama-3.3-70b-instruct:free", # <--- Modelo gratuito y estable
                 "messages": messages,
                 "temperature": 0.7
             },
