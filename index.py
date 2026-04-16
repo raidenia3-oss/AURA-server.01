@@ -1,7 +1,7 @@
 import os
 import requests
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 
 app = FastAPI()
 
