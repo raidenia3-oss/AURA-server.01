@@ -80,12 +80,12 @@ async def chat(request: Request):
             try:
                 search = vector_index.query(data=user_query, top_k=2, include_metadata=True)
                 for item in search:
-                    memoria_contexto += f"\\n[Dato recuperado: {item.metadata.get('res')}]"
+                    memoria_contexto += f"\\n[Dato recordado: {item.metadata.get('res')}]"
             except: pass
 
         system_prompt = {
             "role": "system",
-            "content": f"Eres AURA, IA de Raiden (fusión Cortana/Jarvis). Experta en C++ y sistemas. Habla en español. Contexto recordado: {memoria_contexto}"
+            "content": f"Eres AURA, IA de Raiden. Fusión táctica de Cortana y Jarvis. Experta en C++ y sistemas. Habla en español. Recuerdos: {memoria_contexto}"
         }
         messages.insert(0, system_prompt)
 
@@ -104,4 +104,4 @@ async def chat(request: Request):
 
         return {"content": respuesta}
     except Exception as e:
-        return JSONResponse(status_code=500, content={"content": f"Error: {str(e)}"})
+        return JSONResponse(status_code=500, content={"content": f"Error interno: {str(e)}"})
