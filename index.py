@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from upstash_vector import Index
 from automation import GameAgent
+from upstash_redis import Redis
 
 app = FastAPI()
 
@@ -605,3 +606,13 @@ messages.insert(0, {
     "role": "system", 
     "content": personality.get_system_prompt(mem_ctx, file_ctx, web_ctx) + game_ctx
 })
+# Conexión a Redis para la cola de tareas
+redis_client = Redis(
+    url=os.environ.get("UPSTASH_REDIS_REST_URL"), 
+    token=os.environ.get("UPSTASH_REDIS_REST_TOKEN")
+)
+
+# Dentro de tu lógica de chat, si detectas "rollercoin":
+if "jugar" in user_query.lower():
+    redis_client.lpush("aura_tasks", "start_rollercoin")
+    # AURA te confirma en el chat que la orden fue enviada
