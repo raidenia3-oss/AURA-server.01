@@ -3,3 +3,4 @@ uvicorn
 requests
 upstash-vector
 duckduckgo-search
+beautifulsoup4
