@@ -2,4 +2,4 @@ fastapi
 uvicorn
 requests
 upstash-vector
-duckduckgo_search
+duckduckgo-search
