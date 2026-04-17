@@ -28,50 +28,54 @@ except Exception:
 
 OR_KEY = os.environ.get("OPENROUTER_API_KEY")
 GOOGLE_KEY = os.environ.get("GOOGLE_API_KEY")
+NGROK_URL = os.environ.get("NGROK_URL", "")  # Solo activo si lo pones en Vercel env vars
 
-# --- MODELOS ---
+# --- MOTOR DE MODELOS CON 5 RESPALDOS ---
 def call_llm(messages: list) -> str:
-    # 1. INTENTO PRIORITARIO: LM STUDIO (TU PC EN CASA)
-    # Reemplaza esta URL con la que te dé el local_bridge.py
-    NGROK_URL = "https://scabbed-uneven-habitant.ngrok-free.dev"
-    
-    try:
-        # Solo intenta si la URL no es la de ejemplo
-        if "TU_URL_DE_NGROK_AQUI" not in NGROK_URL:
+
+    # 1. LM Studio local (solo si NGROK_URL está configurada en Vercel)
+    if NGROK_URL:
+        try:
             res = requests.post(
                 NGROK_URL,
-                json={
-                    "model": "qwen3.5-9b", 
-                    "messages": messages,
-                    "temperature": 0.7
-                },
-                timeout=12
+                json={"model": "local", "messages": messages, "temperature": 0.7},
+                timeout=5  # timeout corto para no bloquear
             )
             if res.status_code == 200:
                 return res.json()['choices'][0]['message']['content']
-    except Exception as e:
-        print(f"LM Studio no disponible, usando respaldos... (Error: {e})")
-
-    # 2. RESPALDO: OPENROUTER
-    if OR_KEY:
-        try:
-            res = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OR_KEY}",
-                    "HTTP-Referer": "https://aura-server-01.vercel.app",
-                    "X-Title": "AURA"
-                },
-                json={"model": "openrouter/free", "messages": messages},
-                timeout=20
-            )
-            ans_raw = res.json()
-            if 'choices' in ans_raw:
-                return ans_raw['choices'][0]['message']['content']
         except:
             pass
 
-    # 3. RESPALDO FINAL: GOOGLE GEMMA
+    # Lista de modelos gratuitos de OpenRouter para rotar
+    or_models = [
+        "openrouter/free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemma-3-27b-it:free",
+        "mistralai/mistral-7b-instruct:free",
+        "microsoft/phi-3-mini-128k-instruct:free",
+    ]
+
+    # 2-6. OpenRouter con rotación de modelos
+    if OR_KEY:
+        for model in or_models:
+            try:
+                res = requests.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {OR_KEY}",
+                        "HTTP-Referer": "https://aura-server-01.vercel.app",
+                        "X-Title": "AURA"
+                    },
+                    json={"model": model, "messages": messages},
+                    timeout=20
+                )
+                ans_raw = res.json()
+                if 'choices' in ans_raw:
+                    return ans_raw['choices'][0]['message']['content']
+            except:
+                continue  # intenta el siguiente modelo
+
+    # 7. Google Gemma directo
     if GOOGLE_KEY:
         try:
             google_messages = [
@@ -93,7 +97,7 @@ def call_llm(messages: list) -> str:
         except:
             pass
 
-    return "[ERROR]: Todos los modelos (Local y Nube) fallaron."
+    return "[ERROR]: Todos los modelos fallaron. Intenta de nuevo en unos segundos."
 
 # --- ENDPOINT NOTICIAS ---
 @app.get("/news")
@@ -128,7 +132,6 @@ HTML_CHAT = """
         body { background: var(--bg); color: var(--green); font-family: 'Courier New', monospace; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         #header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 8px 20px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
         #header .title { font-size: 13px; letter-spacing: 4px; color: var(--green); }
-        #header .right { display: flex; align-items: center; gap: 15px; }
         #status { font-size: 10px; color: var(--text-dim); letter-spacing: 2px; }
         #status.active { color: var(--green); }
         #status.speaking { color: #00aaff; }
@@ -142,56 +145,53 @@ HTML_CHAT = """
         #main { display: flex; flex: 1; overflow: hidden; }
         #sidebar { width: 200px; background: var(--bg2); border-right: 1px solid var(--border); padding: 15px 10px; display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; overflow-y: auto; }
         .sidebar-title { font-size: 9px; color: var(--text-dim); letter-spacing: 2px; padding: 5px 8px; margin-top: 10px; }
-        .sidebar-btn { background: none; border: 1px solid var(--border); color: var(--text-dim); padding: 8px 10px; text-align: left; cursor: pointer; font-family: monospace; font-size: 11px; transition: all 0.2s; border-radius: 2px; }
+        .sidebar-btn { background: none; border: 1px solid var(--border); color: var(--text-dim); padding: 8px 10px; text-align: left; cursor: pointer; font-family: monospace; font-size: 11px; transition: all 0.2s; border-radius: 2px; width: 100%; }
         .sidebar-btn:hover { border-color: var(--green-dim); color: var(--green); background: var(--green-dark); }
         .sidebar-btn.active { border-color: var(--green); color: var(--green); background: var(--green-dark); }
         #chat-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
         #chat::-webkit-scrollbar { width: 4px; }
-        #chat::-webkit-scrollbar-track { background: var(--bg); }
         #chat::-webkit-scrollbar-thumb { background: var(--border); }
         .msg { max-width: 80%; padding: 12px 15px; border-radius: 2px; font-size: 12px; line-height: 1.6; border: 1px solid var(--border); animation: fadeIn 0.3s ease; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; } }
         .msg.user { align-self: flex-end; background: var(--green-dark); border-color: var(--green-dim); }
-        .msg.aura { align-self: flex-start; background: var(--bg2); border-color: var(--border); }
+        .msg.aura { align-self: flex-start; background: var(--bg2); }
         .msg.aura:hover { border-color: var(--green-dim); }
-        .msg.system { align-self: center; background: none; border-color: var(--border); font-size: 10px; color: var(--text-dim); max-width: 100%; text-align: center; padding: 5px 15px; }
-        .msg-header { font-size: 10px; color: var(--green-dim); margin-bottom: 6px; letter-spacing: 1px; }
-        .msg-header .tags { display: inline-flex; gap: 5px; margin-left: 8px; }
+        .msg.system { align-self: center; background: none; font-size: 10px; color: var(--text-dim); max-width: 100%; text-align: center; padding: 5px 15px; }
+        .msg-header { font-size: 10px; color: var(--green-dim); margin-bottom: 6px; letter-spacing: 1px; display: flex; align-items: center; gap: 6px; }
         .tag { font-size: 9px; padding: 1px 5px; border-radius: 2px; }
-        .tag.web { background: #001133; color: #4488ff; border: 1px solid #003366; }
+        .tag.web  { background: #001133; color: #4488ff; border: 1px solid #003366; }
         .tag.file { background: #1a0a00; color: #ff8844; border: 1px solid #663300; }
-        .tag.mem { background: #0a0a1a; color: #8844ff; border: 1px solid #330066; }
+        .tag.mem  { background: #0a0a1a; color: #8844ff; border: 1px solid #330066; }
         .tag.game { background: #001a00; color: #00ff88; border: 1px solid #006633; }
         .msg-body { white-space: pre-wrap; }
-        #typing { display: none; align-self: flex-start; padding: 10px 15px; background: var(--bg2); border: 1px solid var(--border); border-radius: 2px; font-size: 11px; color: var(--text-dim); }
-        #typing.show { display: block; }
+        #typing-indicator { padding: 8px 20px; font-size: 10px; color: var(--text-dim); display: none; flex-shrink: 0; }
+        #typing-indicator.show { display: block; }
         .blink { animation: blink 1s infinite; }
         @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
-        #input-area { background: var(--bg2); border-top: 1px solid var(--border); padding: 12px 20px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+        #input-area { background: var(--bg2); border-top: 1px solid var(--border); padding: 12px 20px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; position: relative; z-index: 10; }
         #toolbar { display: flex; gap: 8px; align-items: center; }
         #file-name { font-size: 10px; color: var(--text-dim); flex: 1; }
         .tool-btn { background: none; border: 1px solid var(--border); color: var(--text-dim); padding: 5px 10px; cursor: pointer; font-family: monospace; font-size: 10px; transition: all 0.2s; }
         .tool-btn:hover { border-color: var(--green-dim); color: var(--green); }
         .tool-btn.active { border-color: #ff4444; color: #ff4444; background: #110000; }
         #input-row { display: flex; gap: 8px; }
-        #msgInput { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--green); padding: 10px 15px; outline: none; font-family: monospace; font-size: 12px; transition: border-color 0.2s; }
+        #msgInput { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--green); padding: 10px 15px; outline: none; font-family: monospace; font-size: 12px; }
         #msgInput:focus { border-color: var(--green-dim); }
         #msgInput::placeholder { color: var(--text-dim); }
-        #sendBtn { background: var(--green); border: none; color: #000; padding: 10px 20px; cursor: pointer; font-family: monospace; font-weight: bold; font-size: 12px; letter-spacing: 1px; transition: background 0.2s; }
+        #sendBtn { background: var(--green); border: none; color: #000; padding: 10px 20px; cursor: pointer; font-family: monospace; font-weight: bold; font-size: 12px; }
         #sendBtn:hover { background: #00cc33; }
+        #sendBtn:disabled { background: var(--green-dim); cursor: not-allowed; }
     </style>
 </head>
 <body>
     <div id="header">
         <div class="title">◈ AURA SYSTEM v3.5</div>
-        <div class="right">
-            <div id="status"><span class="dot"></span>STANDBY</div>
-        </div>
+        <div id="status"><span class="dot"></span>STANDBY</div>
     </div>
     <div id="news-ticker">
         <span class="label">◈ LIVE</span>
-        <span id="ticker-content">Cargando noticias en tiempo real...</span>
+        <span id="ticker-content">Cargando noticias...</span>
     </div>
     <div id="main">
         <div id="sidebar">
@@ -201,23 +201,20 @@ HTML_CHAT = """
             <button class="sidebar-btn" onclick="quickCmd('busca: precio GPU Nvidia hoy')">🔧 Hardware</button>
             <button class="sidebar-btn" onclick="quickCmd('qué es ')">📖 Wikipedia</button>
             <button class="sidebar-btn" onclick="quickCmd('estado rollercoin')">🎮 RollerCoin</button>
-
             <div class="sidebar-title">◈ SISTEMA</div>
             <button class="sidebar-btn" id="notifBtn" onclick="toggleNotifications()">🔔 Alertas OFF</button>
             <button class="sidebar-btn" onclick="clearChat()">🗑 Limpiar</button>
             <button class="sidebar-btn" onclick="document.getElementById('fileInput').click()">📎 Archivo</button>
             <input type="file" id="fileInput" accept=".cpp,.c,.py,.txt,.js,.ts,.md,.json" style="display:none" onchange="handleFile()">
-
             <div class="sidebar-title">◈ ESTADO</div>
-            <div style="font-size:10px; color:#333; padding:5px 8px;" id="mem-status">Memoria: --</div>
+            <div style="font-size:10px; color:#333; padding:5px 8px;" id="mem-status">Noticias: --</div>
             <div style="font-size:10px; color:#00aa2a; padding:5px 8px;">Búsqueda: activa</div>
         </div>
-
         <div id="chat-area">
             <div id="chat">
-                <div class="msg system">◈ AURA v3.5 — Motor local/dual activo — Búsqueda en tiempo real activada</div>
+                <div class="msg system">◈ AURA v3.5 — 5 motores activos — Búsqueda en tiempo real</div>
             </div>
-            <div id="typing">AURA procesando<span class="blink">▋</span></div>
+            <div id="typing-indicator">AURA procesando<span class="blink">▋</span></div>
             <div id="input-area">
                 <div id="toolbar">
                     <span id="file-name">Sin archivo adjunto</span>
@@ -225,7 +222,7 @@ HTML_CHAT = """
                     <button class="tool-btn" id="voiceBtn" onclick="toggleVoice()">🎤 VOZ</button>
                 </div>
                 <div id="input-row">
-                    <input type="text" id="msgInput" placeholder="Escribe una orden..." onkeypress="if(event.key==='Enter') send()">
+                    <input type="text" id="msgInput" placeholder="Escribe una orden..." onkeypress="if(event.key==='Enter' && !event.shiftKey) send()">
                     <button id="sendBtn" onclick="send()">EJECUTAR</button>
                 </div>
             </div>
@@ -236,9 +233,11 @@ HTML_CHAT = """
         const chat = document.getElementById('chat');
         const input = document.getElementById('msgInput');
         const status = document.getElementById('status');
-        const typing = document.getElementById('typing');
+        const typingEl = document.getElementById('typing-indicator');
+        const sendBtn = document.getElementById('sendBtn');
         let fileContent = null, fileName = null, isListening = false, recognition = null;
         let notificationsOn = false, newsInterval = null;
+        let isSending = false;
 
         async function loadTicker() {
             try {
@@ -257,11 +256,19 @@ HTML_CHAT = """
         async function toggleNotifications() {
             if (!notificationsOn) {
                 const perm = await Notification.requestPermission();
-                if (perm !== 'granted') { addMsg('system', 'Permiso de notificaciones denegado.'); return; }
+                if (perm !== 'granted') { addMsg('system', 'Permiso denegado.'); return; }
                 notificationsOn = true;
                 document.getElementById('notifBtn').textContent = '🔔 Alertas ON';
                 document.getElementById('notifBtn').classList.add('active');
-                newsInterval = setInterval(checkNews, 10 * 60 * 1000);
+                newsInterval = setInterval(async () => {
+                    try {
+                        const res = await fetch('/news');
+                        const data = await res.json();
+                        if (data.news && data.news.length > 0) {
+                            new Notification('AURA', { body: data.news[0].replace(/\[.*?\]/g,'').trim() });
+                        }
+                    } catch(e) {}
+                }, 10 * 60 * 1000);
                 addMsg('system', 'Alertas activadas.');
             } else {
                 notificationsOn = false;
@@ -270,17 +277,6 @@ HTML_CHAT = """
                 clearInterval(newsInterval);
                 addMsg('system', 'Alertas desactivadas.');
             }
-        }
-
-        async function checkNews() {
-            try {
-                const res = await fetch('/news');
-                const data = await res.json();
-                if (data.news && data.news.length > 0) {
-                    const top = data.news[0].replace(/\[.*?\]/g, '').trim();
-                    new Notification('AURA — Noticia destacada', { body: top });
-                }
-            } catch(e) {}
         }
 
         function handleFile() {
@@ -292,7 +288,7 @@ HTML_CHAT = """
                 fileName = file.name;
                 document.getElementById('file-name').textContent = '📄 ' + fileName;
                 document.getElementById('clearFileBtn').style.display = 'inline';
-                addMsg('system', `Archivo cargado: ${fileName}`);
+                addMsg('system', 'Archivo cargado: ' + fileName);
             };
             reader.readAsText(file);
         }
@@ -305,37 +301,43 @@ HTML_CHAT = """
         }
 
         function toggleVoice() {
-            if (!('webkitSpeechRecognition' in window)) { alert('Usa Chrome.'); return; }
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SR) { alert('Usa Chrome para voz.'); return; }
             if (isListening) { recognition.stop(); return; }
-            const SR = window.webkitSpeechRecognition;
             recognition = new SR();
             recognition.lang = 'es-ES';
             recognition.onstart = () => {
                 isListening = true;
                 document.getElementById('voiceBtn').classList.add('active');
+                document.getElementById('voiceBtn').textContent = '🔴 ESCUCHANDO';
                 setStatus('ESCUCHANDO', 'active');
             };
             recognition.onresult = (e) => { input.value = e.results[0][0].transcript; send(); };
             recognition.onend = () => {
                 isListening = false;
                 document.getElementById('voiceBtn').classList.remove('active');
+                document.getElementById('voiceBtn').textContent = '🎤 VOZ';
                 setStatus('STANDBY', '');
             };
             recognition.start();
         }
 
         function speak(text) {
-            if (!('speechSynthesis' in window)) return;
+            if (!window.speechSynthesis) return;
             window.speechSynthesis.cancel();
-            const utt = new SpeechSynthesisUtterance(text.substring(0, 300));
+            const utt = new SpeechSynthesisUtterance(text.replace(/[*#`\[\]]/g,'').substring(0,300));
             utt.lang = 'es-ES'; utt.rate = 1.1;
+            const voices = window.speechSynthesis.getVoices();
+            const v = voices.find(v => v.lang.startsWith('es') && (v.name.includes('Paulina')||v.name.includes('Monica')||v.name.includes('Laura')))
+                   || voices.find(v => v.lang.startsWith('es'));
+            if (v) utt.voice = v;
             utt.onstart = () => setStatus('HABLANDO', 'speaking');
             utt.onend = () => setStatus('STANDBY', '');
             window.speechSynthesis.speak(utt);
         }
 
         function setStatus(text, cls) {
-            status.innerHTML = `<span class="dot"></span>${text}`;
+            status.innerHTML = '<span class="dot"></span>' + text;
             status.className = cls;
         }
 
@@ -351,7 +353,7 @@ HTML_CHAT = """
                 if (meta.mem)  tags += '<span class="tag mem">🧠 MEMORIA</span>';
                 if (meta.game) tags += '<span class="tag game">🎮 JUEGO</span>';
                 const label = type === 'aura' ? 'AURA' : 'RAIDEN';
-                div.innerHTML = `<div class="msg-header">${label}<span class="tags">${tags}</span></div><div class="msg-body">${text.replace(/\n/g,'<br>')}</div>`;
+                div.innerHTML = '<div class="msg-header">' + label + tags + '</div><div class="msg-body">' + text.replace(/\n/g,'<br>') + '</div>';
             }
             chat.appendChild(div);
             chat.scrollTop = chat.scrollHeight;
@@ -366,11 +368,16 @@ HTML_CHAT = """
         }
 
         async function send() {
+            if (isSending) return;
             const val = input.value.trim();
             if (!val) return;
+            isSending = true;
             input.value = '';
-            addMsg('user', val);
-            typing.classList.add('show');
+            sendBtn.disabled = true;
+            sendBtn.textContent = '...';
+            addMsg('user', val + (fileName ? ' [📄 ' + fileName + ']' : ''));
+            typingEl.classList.add('show');
+            chat.scrollTop = chat.scrollHeight;
             setStatus('PROCESANDO', 'active');
             try {
                 const res = await fetch('/chat', {
@@ -383,20 +390,23 @@ HTML_CHAT = """
                     })
                 });
                 const data = await res.json();
-                typing.classList.remove('show');
+                typingEl.classList.remove('show');
                 addMsg('aura', data.content, {
-                    web: data.used_search,
-                    file: data.used_file,
-                    mem: data.used_memory,
-                    game: data.used_game
+                    web: data.used_search, file: data.used_file,
+                    mem: data.used_memory, game: data.used_game
                 });
                 speak(data.content);
             } catch(e) {
-                typing.classList.remove('show');
-                addMsg('system', 'Error: ' + e.message);
+                typingEl.classList.remove('show');
+                addMsg('system', 'Error de conexión: ' + e.message);
             }
+            isSending = false;
+            sendBtn.disabled = false;
+            sendBtn.textContent = 'EJECUTAR';
             setStatus('STANDBY', '');
         }
+
+        window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
     </script>
 </body>
 </html>
@@ -417,13 +427,11 @@ async def chat(request: Request):
 
         used_search = used_file = used_memory = used_game = False
 
-        # --- Contexto Archivo ---
         file_ctx = ""
         if file_content:
             used_file = True
             file_ctx = f"\n[Archivo: {file_name}]:\n{file_content[:5000]}"
 
-        # --- Contexto Memoria ---
         mem_ctx = ""
         if vector_index:
             try:
@@ -433,26 +441,36 @@ async def chat(request: Request):
                     used_memory = True
             except: pass
 
-        # --- Contexto Web ---
         web_ctx = ""
-        keywords = ["busca:", "qué es", "precio", "noticias", "hoy", "nvidia", "tutorial"]
+        keywords = [
+            "busca:", "buscar", "qué es", "que es", "cómo", "como",
+            "precio", "noticia", "noticias", "hoy", "actual", "último",
+            "ultimo", "2024", "2025", "2026", "error", "solución",
+            "solucion", "tutorial", "github", "cuánto", "cuanto",
+            "quién", "quien", "dónde", "donde", "importante",
+            "reciente", "nuevo", "nueva", "mundial", "guerra",
+            "tecnología", "tecnologia", "nvidia", "gpu", "cpu",
+            "intel", "amd", "apple", "google", "microsoft"
+        ]
         if any(k in user_query.lower() for k in keywords):
             web_ctx = smart_search(user_query.replace("busca:", "").strip())
             if web_ctx: used_search = True
 
-        # --- Contexto Juego ---
         game_ctx = ""
-        if "rollercoin" in user_query.lower():
+        if any(k in user_query.lower() for k in ["rollercoin", "juego", "jugar", "mining"]):
             used_game = True
-            game_ctx = "\n[SISTEMA]: Módulo de Rollercoin activo en PC local."
+            game_ctx = "\n[JUEGO]: Módulo RollerCoin activo."
+            if redis_client:
+                try: redis_client.lpush("aura_tasks", "check_game")
+                except: pass
 
-        # --- Prompt Final ---
-        system_content = personality.get_system_prompt(mem_ctx, file_ctx, web_ctx) + game_ctx
-        messages.insert(0, {"role": "system", "content": system_content})
+        messages.insert(0, {
+            "role": "system",
+            "content": personality.get_system_prompt(mem_ctx, file_ctx, web_ctx) + game_ctx
+        })
 
         ans = call_llm(messages)
 
-        # Guardar en memoria
         if vector_index and ans:
             try:
                 vector_index.upsert(vectors=[(f"msg_{os.urandom(2).hex()}", user_query, {"res": ans})])
@@ -460,11 +478,13 @@ async def chat(request: Request):
 
         return {
             "content": ans,
-            "used_search": used_search,
-            "used_file": used_file,
-            "used_memory": used_memory,
-            "used_game": used_game
+            "used_search": used_search, "used_file": used_file,
+            "used_memory": used_memory, "used_game": used_game
         }
 
     except Exception as e:
-        return JSONResponse(status_code=500, content={"content": f"Error: {str(e)}"})
+        return JSONResponse(status_code=500, content={
+            "content": f"Error: {str(e)}",
+            "used_search": False, "used_file": False,
+            "used_memory": False, "used_game": False
+        })
