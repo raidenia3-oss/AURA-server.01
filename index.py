@@ -5,8 +5,6 @@ from search import smart_search
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from upstash_vector import Index
-from automation import GameAgent
-from upstash_redis import Redis
 
 app = FastAPI()
 
@@ -18,6 +16,16 @@ try:
     )
 except Exception:
     vector_index = None
+
+# Redis opcional (agregar upstash-redis a requirements si lo usas)
+try:
+    from upstash_redis import Redis
+    redis_client = Redis(
+        url=os.environ.get("UPSTASH_REDIS_REST_URL"),
+        token=os.environ.get("UPSTASH_REDIS_REST_TOKEN")
+    )
+except Exception:
+    redis_client = None
 
 OR_KEY = os.environ.get("OPENROUTER_API_KEY")
 GOOGLE_KEY = os.environ.get("GOOGLE_API_KEY")
@@ -63,7 +71,7 @@ def call_llm(messages: list) -> str:
             pass
     return "[ERROR]: Todos los modelos fallaron."
 
-# --- ENDPOINT NOTICIAS (para segundo plano) ---
+# --- ENDPOINT NOTICIAS ---
 @app.get("/news")
 async def get_news():
     try:
@@ -94,17 +102,7 @@ HTML_CHAT = """
             --text-dim: #444;
         }
         body { background: var(--bg); color: var(--green); font-family: 'Courier New', monospace; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-
-        /* HEADER */
-        #header {
-            background: var(--bg2);
-            border-bottom: 1px solid var(--border);
-            padding: 8px 20px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-shrink: 0;
-        }
+        #header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 8px 20px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
         #header .title { font-size: 13px; letter-spacing: 4px; color: var(--green); }
         #header .right { display: flex; align-items: center; gap: 15px; }
         #status { font-size: 10px; color: var(--text-dim); letter-spacing: 2px; }
@@ -113,168 +111,50 @@ HTML_CHAT = """
         .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim); margin-right: 5px; }
         #status.active .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
         #status.speaking .dot { background: #00aaff; box-shadow: 0 0 6px #00aaff; }
-
-        /* TICKER noticias */
-        #news-ticker {
-            background: #050505;
-            border-bottom: 1px solid var(--border);
-            padding: 5px 20px;
-            font-size: 10px;
-            color: var(--text-dim);
-            overflow: hidden;
-            white-space: nowrap;
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+        #news-ticker { background: #050505; border-bottom: 1px solid var(--border); padding: 5px 20px; font-size: 10px; color: var(--text-dim); overflow: hidden; white-space: nowrap; flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
         #news-ticker .label { color: var(--green-dim); flex-shrink: 0; letter-spacing: 2px; }
         #ticker-content { display: inline-block; animation: ticker 40s linear infinite; }
         @keyframes ticker { 0% { transform: translateX(100vw); } 100% { transform: translateX(-100%); } }
-
-        /* MAIN LAYOUT */
         #main { display: flex; flex: 1; overflow: hidden; }
-
-        /* SIDEBAR */
-        #sidebar {
-            width: 200px;
-            background: var(--bg2);
-            border-right: 1px solid var(--border);
-            padding: 15px 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            flex-shrink: 0;
-            overflow-y: auto;
-        }
+        #sidebar { width: 200px; background: var(--bg2); border-right: 1px solid var(--border); padding: 15px 10px; display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; overflow-y: auto; }
         .sidebar-title { font-size: 9px; color: var(--text-dim); letter-spacing: 2px; padding: 5px 8px; margin-top: 10px; }
-        .sidebar-btn {
-            background: none;
-            border: 1px solid var(--border);
-            color: var(--text-dim);
-            padding: 8px 10px;
-            text-align: left;
-            cursor: pointer;
-            font-family: monospace;
-            font-size: 11px;
-            transition: all 0.2s;
-            border-radius: 2px;
-        }
+        .sidebar-btn { background: none; border: 1px solid var(--border); color: var(--text-dim); padding: 8px 10px; text-align: left; cursor: pointer; font-family: monospace; font-size: 11px; transition: all 0.2s; border-radius: 2px; }
         .sidebar-btn:hover { border-color: var(--green-dim); color: var(--green); background: var(--green-dark); }
         .sidebar-btn.active { border-color: var(--green); color: var(--green); background: var(--green-dark); }
-
-        /* CHAT */
         #chat-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
         #chat::-webkit-scrollbar { width: 4px; }
         #chat::-webkit-scrollbar-track { background: var(--bg); }
         #chat::-webkit-scrollbar-thumb { background: var(--border); }
-
-        /* MENSAJES */
-        .msg {
-            max-width: 80%;
-            padding: 12px 15px;
-            border-radius: 2px;
-            font-size: 12px;
-            line-height: 1.6;
-            border: 1px solid var(--border);
-            animation: fadeIn 0.3s ease;
-        }
+        .msg { max-width: 80%; padding: 12px 15px; border-radius: 2px; font-size: 12px; line-height: 1.6; border: 1px solid var(--border); animation: fadeIn 0.3s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .msg.user {
-            align-self: flex-end;
-            background: var(--green-dark);
-            border-color: var(--green-dim);
-        }
-        .msg.aura {
-            align-self: flex-start;
-            background: var(--bg2);
-            border-color: var(--border);
-        }
+        .msg.user { align-self: flex-end; background: var(--green-dark); border-color: var(--green-dim); }
+        .msg.aura { align-self: flex-start; background: var(--bg2); border-color: var(--border); }
         .msg.aura:hover { border-color: var(--green-dim); }
-        .msg.system {
-            align-self: center;
-            background: none;
-            border-color: var(--border);
-            font-size: 10px;
-            color: var(--text-dim);
-            max-width: 100%;
-            text-align: center;
-            padding: 5px 15px;
-        }
+        .msg.system { align-self: center; background: none; border-color: var(--border); font-size: 10px; color: var(--text-dim); max-width: 100%; text-align: center; padding: 5px 15px; }
         .msg-header { font-size: 10px; color: var(--green-dim); margin-bottom: 6px; letter-spacing: 1px; }
         .msg-header .tags { display: inline-flex; gap: 5px; margin-left: 8px; }
         .tag { font-size: 9px; padding: 1px 5px; border-radius: 2px; }
         .tag.web { background: #001133; color: #4488ff; border: 1px solid #003366; }
         .tag.file { background: #1a0a00; color: #ff8844; border: 1px solid #663300; }
         .tag.mem { background: #0a0a1a; color: #8844ff; border: 1px solid #330066; }
+        .tag.game { background: #001a00; color: #00ff88; border: 1px solid #006633; }
         .msg-body { white-space: pre-wrap; }
-
-        /* TYPING INDICATOR */
-        #typing {
-            display: none;
-            align-self: flex-start;
-            padding: 10px 15px;
-            background: var(--bg2);
-            border: 1px solid var(--border);
-            border-radius: 2px;
-            font-size: 11px;
-            color: var(--text-dim);
-        }
+        #typing { display: none; align-self: flex-start; padding: 10px 15px; background: var(--bg2); border: 1px solid var(--border); border-radius: 2px; font-size: 11px; color: var(--text-dim); }
         #typing.show { display: block; }
         .blink { animation: blink 1s infinite; }
         @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
-
-        /* INPUT AREA */
-        #input-area {
-            background: var(--bg2);
-            border-top: 1px solid var(--border);
-            padding: 12px 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            flex-shrink: 0;
-        }
+        #input-area { background: var(--bg2); border-top: 1px solid var(--border); padding: 12px 20px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
         #toolbar { display: flex; gap: 8px; align-items: center; }
         #file-name { font-size: 10px; color: var(--text-dim); flex: 1; }
-        .tool-btn {
-            background: none;
-            border: 1px solid var(--border);
-            color: var(--text-dim);
-            padding: 5px 10px;
-            cursor: pointer;
-            font-family: monospace;
-            font-size: 10px;
-            transition: all 0.2s;
-        }
+        .tool-btn { background: none; border: 1px solid var(--border); color: var(--text-dim); padding: 5px 10px; cursor: pointer; font-family: monospace; font-size: 10px; transition: all 0.2s; }
         .tool-btn:hover { border-color: var(--green-dim); color: var(--green); }
         .tool-btn.active { border-color: #ff4444; color: #ff4444; background: #110000; }
         #input-row { display: flex; gap: 8px; }
-        #msgInput {
-            flex: 1;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            color: var(--green);
-            padding: 10px 15px;
-            outline: none;
-            font-family: monospace;
-            font-size: 12px;
-            transition: border-color 0.2s;
-        }
+        #msgInput { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--green); padding: 10px 15px; outline: none; font-family: monospace; font-size: 12px; transition: border-color 0.2s; }
         #msgInput:focus { border-color: var(--green-dim); }
         #msgInput::placeholder { color: var(--text-dim); }
-        #sendBtn {
-            background: var(--green);
-            border: none;
-            color: #000;
-            padding: 10px 20px;
-            cursor: pointer;
-            font-family: monospace;
-            font-weight: bold;
-            font-size: 12px;
-            letter-spacing: 1px;
-            transition: background 0.2s;
-        }
+        #sendBtn { background: var(--green); border: none; color: #000; padding: 10px 20px; cursor: pointer; font-family: monospace; font-weight: bold; font-size: 12px; letter-spacing: 1px; transition: background 0.2s; }
         #sendBtn:hover { background: #00cc33; }
     </style>
 </head>
@@ -285,12 +165,10 @@ HTML_CHAT = """
             <div id="status"><span class="dot"></span>STANDBY</div>
         </div>
     </div>
-
     <div id="news-ticker">
         <span class="label">◈ LIVE</span>
         <span id="ticker-content">Cargando noticias en tiempo real...</span>
     </div>
-
     <div id="main">
         <div id="sidebar">
             <div class="sidebar-title">◈ COMANDOS</div>
@@ -298,6 +176,7 @@ HTML_CHAT = """
             <button class="sidebar-btn" onclick="quickCmd('busca: últimas noticias tecnología')">💻 Tech</button>
             <button class="sidebar-btn" onclick="quickCmd('busca: precio GPU Nvidia hoy')">🔧 Hardware</button>
             <button class="sidebar-btn" onclick="quickCmd('qué es ')">📖 Wikipedia</button>
+            <button class="sidebar-btn" onclick="quickCmd('estado rollercoin')">🎮 RollerCoin</button>
 
             <div class="sidebar-title">◈ SISTEMA</div>
             <button class="sidebar-btn" id="notifBtn" onclick="toggleNotifications()">🔔 Alertas OFF</button>
@@ -306,8 +185,8 @@ HTML_CHAT = """
             <input type="file" id="fileInput" accept=".cpp,.c,.py,.txt,.js,.ts,.md,.json" style="display:none" onchange="handleFile()">
 
             <div class="sidebar-title">◈ ESTADO</div>
-            <div style="font-size:10px; color: #333; padding: 5px 8px;" id="mem-status">Memoria: --</div>
-            <div style="font-size:10px; color: #333; padding: 5px 8px;" id="search-status">Búsqueda: activa</div>
+            <div style="font-size:10px; color:#333; padding:5px 8px;" id="mem-status">Memoria: --</div>
+            <div style="font-size:10px; color:#00aa2a; padding:5px 8px;">Búsqueda: activa</div>
         </div>
 
         <div id="chat-area">
@@ -315,7 +194,6 @@ HTML_CHAT = """
                 <div class="msg system">◈ AURA v3.5 — Motor dual activo — Búsqueda en tiempo real activada</div>
             </div>
             <div id="typing">AURA procesando<span class="blink">▋</span></div>
-
             <div id="input-area">
                 <div id="toolbar">
                     <span id="file-name">Sin archivo adjunto</span>
@@ -338,21 +216,20 @@ HTML_CHAT = """
         let fileContent = null, fileName = null, isListening = false, recognition = null;
         let notificationsOn = false, newsInterval = null;
 
-        // --- NOTICIAS TICKER ---
         async function loadTicker() {
             try {
                 const res = await fetch('/news');
                 const data = await res.json();
                 if (data.news && data.news.length > 0) {
                     document.getElementById('ticker-content').textContent = data.news.join('  ◈  ');
+                    document.getElementById('mem-status').textContent = 'Noticias: OK';
                     document.getElementById('mem-status').style.color = '#00aa2a';
                 }
             } catch(e) {}
         }
         loadTicker();
-        setInterval(loadTicker, 5 * 60 * 1000); // actualizar cada 5 min
+        setInterval(loadTicker, 5 * 60 * 1000);
 
-        // --- NOTIFICACIONES EN SEGUNDO PLANO ---
         async function toggleNotifications() {
             if (!notificationsOn) {
                 const perm = await Notification.requestPermission();
@@ -360,8 +237,8 @@ HTML_CHAT = """
                 notificationsOn = true;
                 document.getElementById('notifBtn').textContent = '🔔 Alertas ON';
                 document.getElementById('notifBtn').classList.add('active');
-                newsInterval = setInterval(checkNews, 10 * 60 * 1000); // cada 10 min
-                addMsg('system', 'Alertas de noticias activadas. AURA te notificará en segundo plano.');
+                newsInterval = setInterval(checkNews, 10 * 60 * 1000);
+                addMsg('system', 'Alertas activadas. AURA notificará en segundo plano cada 10 min.');
             } else {
                 notificationsOn = false;
                 document.getElementById('notifBtn').textContent = '🔔 Alertas OFF';
@@ -377,15 +254,11 @@ HTML_CHAT = """
                 const data = await res.json();
                 if (data.news && data.news.length > 0) {
                     const top = data.news[0].replace(/\[.*?\]/g, '').trim();
-                    new Notification('AURA — Noticia destacada', {
-                        body: top,
-                        icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">◈</text></svg>'
-                    });
+                    new Notification('AURA — Noticia destacada', { body: top });
                 }
             } catch(e) {}
         }
 
-        // --- ARCHIVOS ---
         function handleFile() {
             const file = document.getElementById('fileInput').files[0];
             if (!file) return;
@@ -407,7 +280,6 @@ HTML_CHAT = """
             document.getElementById('fileInput').value = '';
         }
 
-        // --- VOZ ---
         function toggleVoice() {
             if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
                 alert('Usa Chrome para voz.'); return;
@@ -451,7 +323,6 @@ HTML_CHAT = """
             status.className = cls;
         }
 
-        // --- MENSAJES ---
         function addMsg(type, text, meta={}) {
             const div = document.createElement('div');
             div.className = 'msg ' + type;
@@ -459,9 +330,10 @@ HTML_CHAT = """
                 div.textContent = text;
             } else {
                 let tags = '';
-                if (meta.web) tags += '<span class="tag web">🌐 WEB</span>';
+                if (meta.web)  tags += '<span class="tag web">🌐 WEB</span>';
                 if (meta.file) tags += '<span class="tag file">📄 ARCHIVO</span>';
-                if (meta.mem) tags += '<span class="tag mem">🧠 MEMORIA</span>';
+                if (meta.mem)  tags += '<span class="tag mem">🧠 MEMORIA</span>';
+                if (meta.game) tags += '<span class="tag game">🎮 JUEGO</span>';
                 const label = type === 'aura' ? 'AURA' : 'RAIDEN';
                 div.innerHTML = `<div class="msg-header">${label}<span class="tags">${tags}</span></div><div class="msg-body">${text.replace(/\n/g,'<br>')}</div>`;
             }
@@ -480,7 +352,6 @@ HTML_CHAT = """
             else { send(); }
         }
 
-        // --- SEND ---
         async function send() {
             const val = input.value.trim();
             if (!val) return;
@@ -489,7 +360,6 @@ HTML_CHAT = """
             typing.classList.add('show');
             chat.scrollTop = chat.scrollHeight;
             setStatus('PROCESANDO', 'active');
-
             try {
                 const res = await fetch('/chat', {
                     method: 'POST',
@@ -505,7 +375,8 @@ HTML_CHAT = """
                 addMsg('aura', data.content, {
                     web: data.used_search,
                     file: data.used_file,
-                    mem: data.used_memory
+                    mem: data.used_memory,
+                    game: data.used_game
                 });
                 speak(data.content);
             } catch(e) {
@@ -528,7 +399,6 @@ async def root():
 @app.post("/chat")
 async def chat(request: Request):
     try:
-        game_agent = GameAgent()
         data = await request.json()
         messages = data.get("messages", [])
         file_content = data.get("file_content")
@@ -538,14 +408,15 @@ async def chat(request: Request):
         used_search = False
         used_file = False
         used_memory = False
+        used_game = False
 
-        # Archivo
+        # --- Archivo ---
         file_ctx = ""
         if file_content:
             used_file = True
             file_ctx = f"\n[Archivo: {file_name}]:\n{file_content[:5000]}"
 
-        # Memoria
+        # --- Memoria vectorial ---
         mem_ctx = ""
         if vector_index:
             try:
@@ -556,7 +427,7 @@ async def chat(request: Request):
             except:
                 pass
 
-        # Búsqueda automática
+        # --- Búsqueda web ---
         web_ctx = ""
         keywords = [
             "busca:", "buscar", "qué es", "que es", "cómo", "como",
@@ -573,46 +444,43 @@ async def chat(request: Request):
             if web_ctx:
                 used_search = True
 
-        messages.insert(0, {
-            "role": "system",
-            "content": personality.get_system_prompt(mem_ctx, file_ctx, web_ctx)
-        })
+        # --- Contexto de juego (RollerCoin etc.) ---
+        game_ctx = ""
+        game_keywords = ["rollercoin", "juego", "jugar", "mining", "satoshi", "estado juego"]
+        if any(k in user_query.lower() for k in game_keywords):
+            used_game = True
+            game_ctx = "\n[SISTEMA DE JUEGO]: Módulo de automatización pendiente de configuración."
+            # Encolar tarea en Redis si está disponible
+            if redis_client:
+                try:
+                    redis_client.lpush("aura_tasks", "check_game_status")
+                except:
+                    pass
+
+        # --- Prompt final ---
+        system_content = personality.get_system_prompt(mem_ctx, file_ctx, web_ctx) + game_ctx
+        messages.insert(0, {"role": "system", "content": system_content})
 
         ans = call_llm(messages)
 
+        # --- Guardar en memoria ---
         if vector_index:
             try:
                 vector_index.upsert(vectors=[(f"msg_{os.urandom(2).hex()}", user_query, {"res": ans})])
             except:
                 pass
 
-        return {"content": ans, "used_search": used_search, "used_file": used_file, "used_memory": used_memory}
+        return {
+            "content": ans,
+            "used_search": used_search,
+            "used_file": used_file,
+            "used_memory": used_memory,
+            "used_game": used_game
+        }
 
     except Exception as e:
         return JSONResponse(status_code=500, content={
             "content": f"Fallo en el Nexo: {str(e)}",
-            "used_search": False, "used_file": False, "used_memory": False
+            "used_search": False, "used_file": False,
+            "used_memory": False, "used_game": False
         })
-# ... (toda tu lógica anterior de búsqueda y archivos)
-
-# --- DETECCIÓN DE COMANDOS DE JUEGO ---
-game_ctx = ""
-if "rollercoin" in user_query.lower() or "juego" in user_query.lower():
-    status = game_agent.get_status()
-    game_ctx = f"\n[SISTEMA DE JUEGO]: {status}"
-
-# Actualiza el System Prompt para incluir el contexto de juego
-messages.insert(0, {
-    "role": "system", 
-    "content": personality.get_system_prompt(mem_ctx, file_ctx, web_ctx) + game_ctx
-})
-# Conexión a Redis para la cola de tareas
-redis_client = Redis(
-    url=os.environ.get("UPSTASH_REDIS_REST_URL"), 
-    token=os.environ.get("UPSTASH_REDIS_REST_TOKEN")
-)
-
-# Dentro de tu lógica de chat, si detectas "rollercoin":
-if "jugar" in user_query.lower():
-    redis_client.lpush("aura_tasks", "start_rollercoin")
-    # AURA te confirma en el chat que la orden fue enviada
