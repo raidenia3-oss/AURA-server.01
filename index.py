@@ -17,7 +17,6 @@ try:
 except Exception:
     vector_index = None
 
-# Redis opcional (agregar upstash-redis a requirements si lo usas)
 try:
     from upstash_redis import Redis
     redis_client = Redis(
@@ -32,6 +31,28 @@ GOOGLE_KEY = os.environ.get("GOOGLE_API_KEY")
 
 # --- MODELOS ---
 def call_llm(messages: list) -> str:
+    # 1. INTENTO PRIORITARIO: LM STUDIO (TU PC EN CASA)
+    # Reemplaza esta URL con la que te dé el local_bridge.py
+    NGROK_URL = "https://scabbed-uneven-habitant.ngrok-free.dev"
+    
+    try:
+        # Solo intenta si la URL no es la de ejemplo
+        if "TU_URL_DE_NGROK_AQUI" not in NGROK_URL:
+            res = requests.post(
+                NGROK_URL,
+                json={
+                    "model": "qwen3.5-9b", 
+                    "messages": messages,
+                    "temperature": 0.7
+                },
+                timeout=12
+            )
+            if res.status_code == 200:
+                return res.json()['choices'][0]['message']['content']
+    except Exception as e:
+        print(f"LM Studio no disponible, usando respaldos... (Error: {e})")
+
+    # 2. RESPALDO: OPENROUTER
     if OR_KEY:
         try:
             res = requests.post(
@@ -49,6 +70,8 @@ def call_llm(messages: list) -> str:
                 return ans_raw['choices'][0]['message']['content']
         except:
             pass
+
+    # 3. RESPALDO FINAL: GOOGLE GEMMA
     if GOOGLE_KEY:
         try:
             google_messages = [
@@ -69,7 +92,8 @@ def call_llm(messages: list) -> str:
             return data["candidates"][0]["content"]["parts"][0]["text"]
         except:
             pass
-    return "[ERROR]: Todos los modelos fallaron."
+
+    return "[ERROR]: Todos los modelos (Local y Nube) fallaron."
 
 # --- ENDPOINT NOTICIAS ---
 @app.get("/news")
@@ -191,7 +215,7 @@ HTML_CHAT = """
 
         <div id="chat-area">
             <div id="chat">
-                <div class="msg system">◈ AURA v3.5 — Motor dual activo — Búsqueda en tiempo real activada</div>
+                <div class="msg system">◈ AURA v3.5 — Motor local/dual activo — Búsqueda en tiempo real activada</div>
             </div>
             <div id="typing">AURA procesando<span class="blink">▋</span></div>
             <div id="input-area">
@@ -201,7 +225,7 @@ HTML_CHAT = """
                     <button class="tool-btn" id="voiceBtn" onclick="toggleVoice()">🎤 VOZ</button>
                 </div>
                 <div id="input-row">
-                    <input type="text" id="msgInput" placeholder="Escribe una orden... (usa 'busca:' para forzar búsqueda)" onkeypress="if(event.key==='Enter') send()">
+                    <input type="text" id="msgInput" placeholder="Escribe una orden..." onkeypress="if(event.key==='Enter') send()">
                     <button id="sendBtn" onclick="send()">EJECUTAR</button>
                 </div>
             </div>
@@ -238,7 +262,7 @@ HTML_CHAT = """
                 document.getElementById('notifBtn').textContent = '🔔 Alertas ON';
                 document.getElementById('notifBtn').classList.add('active');
                 newsInterval = setInterval(checkNews, 10 * 60 * 1000);
-                addMsg('system', 'Alertas activadas. AURA notificará en segundo plano cada 10 min.');
+                addMsg('system', 'Alertas activadas.');
             } else {
                 notificationsOn = false;
                 document.getElementById('notifBtn').textContent = '🔔 Alertas OFF';
@@ -268,7 +292,7 @@ HTML_CHAT = """
                 fileName = file.name;
                 document.getElementById('file-name').textContent = '📄 ' + fileName;
                 document.getElementById('clearFileBtn').style.display = 'inline';
-                addMsg('system', `Archivo cargado: ${fileName} (${fileContent.length} chars)`);
+                addMsg('system', `Archivo cargado: ${fileName}`);
             };
             reader.readAsText(file);
         }
@@ -281,24 +305,20 @@ HTML_CHAT = """
         }
 
         function toggleVoice() {
-            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                alert('Usa Chrome para voz.'); return;
-            }
+            if (!('webkitSpeechRecognition' in window)) { alert('Usa Chrome.'); return; }
             if (isListening) { recognition.stop(); return; }
-            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const SR = window.webkitSpeechRecognition;
             recognition = new SR();
             recognition.lang = 'es-ES';
             recognition.onstart = () => {
                 isListening = true;
                 document.getElementById('voiceBtn').classList.add('active');
-                document.getElementById('voiceBtn').textContent = '🔴 ESCUCHANDO';
                 setStatus('ESCUCHANDO', 'active');
             };
             recognition.onresult = (e) => { input.value = e.results[0][0].transcript; send(); };
             recognition.onend = () => {
                 isListening = false;
                 document.getElementById('voiceBtn').classList.remove('active');
-                document.getElementById('voiceBtn').textContent = '🎤 VOZ';
                 setStatus('STANDBY', '');
             };
             recognition.start();
@@ -307,12 +327,8 @@ HTML_CHAT = """
         function speak(text) {
             if (!('speechSynthesis' in window)) return;
             window.speechSynthesis.cancel();
-            const utt = new SpeechSynthesisUtterance(text.replace(/[*#`\[\]]/g, '').substring(0, 300));
+            const utt = new SpeechSynthesisUtterance(text.substring(0, 300));
             utt.lang = 'es-ES'; utt.rate = 1.1;
-            const voices = window.speechSynthesis.getVoices();
-            const v = voices.find(v => v.lang.startsWith('es') && (v.name.includes('Paulina') || v.name.includes('Monica') || v.name.includes('Laura')))
-                   || voices.find(v => v.lang.startsWith('es'));
-            if (v) utt.voice = v;
             utt.onstart = () => setStatus('HABLANDO', 'speaking');
             utt.onend = () => setStatus('STANDBY', '');
             window.speechSynthesis.speak(utt);
@@ -342,23 +358,19 @@ HTML_CHAT = """
             return div;
         }
 
-        function clearChat() {
-            chat.innerHTML = '<div class="msg system">◈ Chat limpiado.</div>';
-        }
+        function clearChat() { chat.innerHTML = '<div class="msg system">◈ Chat limpiado.</div>'; }
 
         function quickCmd(cmd) {
             input.value = cmd;
-            if (cmd.endsWith(' ')) { input.focus(); }
-            else { send(); }
+            if (cmd.endsWith(' ')) { input.focus(); } else { send(); }
         }
 
         async function send() {
             const val = input.value.trim();
             if (!val) return;
             input.value = '';
-            addMsg('user', val + (fileName ? ` [📄 ${fileName}]` : ''));
+            addMsg('user', val);
             typing.classList.add('show');
-            chat.scrollTop = chat.scrollHeight;
             setStatus('PROCESANDO', 'active');
             try {
                 const res = await fetch('/chat', {
@@ -381,12 +393,10 @@ HTML_CHAT = """
                 speak(data.content);
             } catch(e) {
                 typing.classList.remove('show');
-                addMsg('system', 'Error de conexión: ' + e.message);
+                addMsg('system', 'Error: ' + e.message);
             }
             setStatus('STANDBY', '');
         }
-
-        window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
     </script>
 </body>
 </html>
@@ -405,18 +415,15 @@ async def chat(request: Request):
         file_name = data.get("file_name")
         user_query = messages[-1]['content'] if messages else ""
 
-        used_search = False
-        used_file = False
-        used_memory = False
-        used_game = False
+        used_search = used_file = used_memory = used_game = False
 
-        # --- Archivo ---
+        # --- Contexto Archivo ---
         file_ctx = ""
         if file_content:
             used_file = True
             file_ctx = f"\n[Archivo: {file_name}]:\n{file_content[:5000]}"
 
-        # --- Memoria vectorial ---
+        # --- Contexto Memoria ---
         mem_ctx = ""
         if vector_index:
             try:
@@ -424,51 +431,32 @@ async def chat(request: Request):
                 for item in result:
                     mem_ctx = f"\n[Memoria]: {item.metadata.get('res')}"
                     used_memory = True
-            except:
-                pass
+            except: pass
 
-        # --- Búsqueda web ---
+        # --- Contexto Web ---
         web_ctx = ""
-        keywords = [
-            "busca:", "buscar", "qué es", "que es", "cómo", "como",
-            "precio", "noticia", "noticias", "hoy", "actual", "último",
-            "ultimo", "2024", "2025", "2026", "error", "solución",
-            "solucion", "tutorial", "github", "cuánto", "cuanto",
-            "quién", "quien", "dónde", "donde", "cuándo", "cuando",
-            "importante", "reciente", "nuevo", "nueva", "lanzó", "lanzo",
-            "mundial", "guerra", "tecnología", "tecnologia", "nvidia",
-            "gpu", "cpu", "intel", "amd", "apple", "google", "microsoft"
-        ]
+        keywords = ["busca:", "qué es", "precio", "noticias", "hoy", "nvidia", "tutorial"]
         if any(k in user_query.lower() for k in keywords):
             web_ctx = smart_search(user_query.replace("busca:", "").strip())
-            if web_ctx:
-                used_search = True
+            if web_ctx: used_search = True
 
-        # --- Contexto de juego (RollerCoin etc.) ---
+        # --- Contexto Juego ---
         game_ctx = ""
-        game_keywords = ["rollercoin", "juego", "jugar", "mining", "satoshi", "estado juego"]
-        if any(k in user_query.lower() for k in game_keywords):
+        if "rollercoin" in user_query.lower():
             used_game = True
-            game_ctx = "\n[SISTEMA DE JUEGO]: Módulo de automatización pendiente de configuración."
-            # Encolar tarea en Redis si está disponible
-            if redis_client:
-                try:
-                    redis_client.lpush("aura_tasks", "check_game_status")
-                except:
-                    pass
+            game_ctx = "\n[SISTEMA]: Módulo de Rollercoin activo en PC local."
 
-        # --- Prompt final ---
+        # --- Prompt Final ---
         system_content = personality.get_system_prompt(mem_ctx, file_ctx, web_ctx) + game_ctx
         messages.insert(0, {"role": "system", "content": system_content})
 
         ans = call_llm(messages)
 
-        # --- Guardar en memoria ---
-        if vector_index:
+        # Guardar en memoria
+        if vector_index and ans:
             try:
                 vector_index.upsert(vectors=[(f"msg_{os.urandom(2).hex()}", user_query, {"res": ans})])
-            except:
-                pass
+            except: pass
 
         return {
             "content": ans,
@@ -479,8 +467,4 @@ async def chat(request: Request):
         }
 
     except Exception as e:
-        return JSONResponse(status_code=500, content={
-            "content": f"Fallo en el Nexo: {str(e)}",
-            "used_search": False, "used_file": False,
-            "used_memory": False, "used_game": False
-        })
+        return JSONResponse(status_code=500, content={"content": f"Error: {str(e)}"})
