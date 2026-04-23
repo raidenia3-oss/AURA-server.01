@@ -5,6 +5,8 @@ from search import smart_search
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from upstash_vector import Index
+from monitor import get_world_news, get_market_summary
+
 
 app = FastAPI()
 
@@ -112,6 +114,21 @@ async def get_news():
     except Exception as e:
         return {"news": [], "error": str(e)}
 
+@app.get("/markets")
+async def get_markets():
+    try:
+        return {"data": get_market_summary()}
+    except Exception as e:
+        return {"data": f"Error: {str(e)}"}
+
+@app.get("/worldnews")
+async def get_world_news_endpoint():
+    try:
+        news = get_world_news()
+        return {"news": news}
+    except Exception as e:
+        return {"news": [], "error": str(e)}
+
 HTML_CHAT = """
 <!DOCTYPE html>
 <html>
@@ -196,7 +213,8 @@ HTML_CHAT = """
     <div id="main">
         <div id="sidebar">
             <div class="sidebar-title">◈ COMANDOS</div>
-            <button class="sidebar-btn" onclick="quickCmd('busca: noticias mundiales hoy')">📡 Noticias</button>
+            <button class="sidebar-btn" onclick="quickCmd('busca: noticias mundiales urgentes hoy')">🌍 Mundial</button>
+            <button class="sidebar-btn" onclick="loadMarkets()">📈 Mercados</button>
             <button class="sidebar-btn" onclick="quickCmd('busca: últimas noticias tecnología')">💻 Tech</button>
             <button class="sidebar-btn" onclick="quickCmd('busca: precio GPU Nvidia hoy')">🔧 Hardware</button>
             <button class="sidebar-btn" onclick="quickCmd('qué es ')">📖 Wikipedia</button>
@@ -353,7 +371,7 @@ HTML_CHAT = """
                 if (meta.mem)  tags += '<span class="tag mem">🧠 MEMORIA</span>';
                 if (meta.game) tags += '<span class="tag game">🎮 JUEGO</span>';
                 const label = type === 'aura' ? 'AURA' : 'RAIDEN';
-                div.innerHTML = '<div class="msg-header">' + label + tags + '</div><div class="msg-body">' + text.replace(/\n/g,'<br>') + '</div>';
+                div.innerHTML = '<div class="msg-header">' + label + tags + '</div><div class="msg-body">' + text.replace(/\\n/g,'<br>') + '</div>';
             }
             chat.appendChild(div);
             chat.scrollTop = chat.scrollHeight;
@@ -406,6 +424,17 @@ HTML_CHAT = """
             setStatus('STANDBY', '');
         }
 
+        async function loadMarkets() {
+            addMsg('system', 'Cargando mercados...');
+            try {
+                const res = await fetch('/markets');
+                const data = await res.json();
+                addMsg('aura', data.data);
+            } catch(e) {
+                addMsg('system', 'Error cargando mercados.');
+            }
+        }
+
         window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
     </script>
 </body>
@@ -430,14 +459,14 @@ async def chat(request: Request):
         file_ctx = ""
         if file_content:
             used_file = True
-            file_ctx = f"\n[Archivo: {file_name}]:\n{file_content[:5000]}"
+            file_ctx = f"\\n[Archivo: {file_name}]:\\n{file_content[:5000]}"
 
         mem_ctx = ""
         if vector_index:
             try:
                 result = vector_index.query(data=user_query, top_k=1, include_metadata=True)
                 for item in result:
-                    mem_ctx = f"\n[Memoria]: {item.metadata.get('res')}"
+                    mem_ctx = f"\\n[Memoria]: {item.metadata.get('res')}"
                     used_memory = True
             except: pass
 
@@ -459,7 +488,7 @@ async def chat(request: Request):
         game_ctx = ""
         if any(k in user_query.lower() for k in ["rollercoin", "juego", "jugar", "mining"]):
             used_game = True
-            game_ctx = "\n[JUEGO]: Módulo RollerCoin activo."
+            game_ctx = "\\n[JUEGO]: Módulo RollerCoin activo."
             if redis_client:
                 try: redis_client.lpush("aura_tasks", "check_game")
                 except: pass
