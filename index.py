@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from upstash_vector import Index
 from monitor import get_world_news, get_market_summary
-
+from models import call_llm, get_status
 
 app = FastAPI()
 
@@ -28,78 +28,6 @@ try:
 except Exception:
     redis_client = None
 
-OR_KEY = os.environ.get("OPENROUTER_API_KEY")
-GOOGLE_KEY = os.environ.get("GOOGLE_API_KEY")
-NGROK_URL = os.environ.get("NGROK_URL", "")  # Solo activo si lo pones en Vercel env vars
-
-# --- MOTOR DE MODELOS CON 5 RESPALDOS ---
-def call_llm(messages: list) -> str:
-
-    # 1. LM Studio local (solo si NGROK_URL está configurada en Vercel)
-    if NGROK_URL:
-        try:
-            res = requests.post(
-                NGROK_URL,
-                json={"model": "local", "messages": messages, "temperature": 0.7},
-                timeout=5  # timeout corto para no bloquear
-            )
-            if res.status_code == 200:
-                return res.json()['choices'][0]['message']['content']
-        except:
-            pass
-
-    # Lista de modelos gratuitos de OpenRouter para rotar
-    or_models = [
-        "openrouter/free",
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "google/gemma-3-27b-it:free",
-        "mistralai/mistral-7b-instruct:free",
-        "microsoft/phi-3-mini-128k-instruct:free",
-    ]
-
-    # 2-6. OpenRouter con rotación de modelos
-    if OR_KEY:
-        for model in or_models:
-            try:
-                res = requests.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {OR_KEY}",
-                        "HTTP-Referer": "https://aura-server-01.vercel.app",
-                        "X-Title": "AURA"
-                    },
-                    json={"model": model, "messages": messages},
-                    timeout=20
-                )
-                ans_raw = res.json()
-                if 'choices' in ans_raw:
-                    return ans_raw['choices'][0]['message']['content']
-            except:
-                continue  # intenta el siguiente modelo
-
-    # 7. Google Gemma directo
-    if GOOGLE_KEY:
-        try:
-            google_messages = [
-                {"role": m["role"] if m["role"] != "system" else "user",
-                 "parts": [{"text": m["content"]}]}
-                for m in messages if m["role"] != "system"
-            ]
-            system_text = next((m["content"] for m in messages if m["role"] == "system"), "")
-            res = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key={GOOGLE_KEY}",
-                json={
-                    "system_instruction": {"parts": [{"text": system_text}]},
-                    "contents": google_messages
-                },
-                timeout=20
-            )
-            data = res.json()
-            return data["candidates"][0]["content"]["parts"][0]["text"]
-        except:
-            pass
-
-    return "[ERROR]: Todos los modelos fallaron. Intenta de nuevo en unos segundos."
 
 # --- ENDPOINT NOTICIAS ---
 @app.get("/news")
@@ -128,6 +56,11 @@ async def get_world_news_endpoint():
         return {"news": news}
     except Exception as e:
         return {"news": [], "error": str(e)}
+
+@app.get("/debug")
+async def debug():
+    return get_status()
+
 
 HTML_CHAT = """
 <!DOCTYPE html>
