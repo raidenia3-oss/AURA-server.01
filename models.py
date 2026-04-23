@@ -1,9 +1,8 @@
 import os
-import requests    
+import requests
 
 OR_KEY = os.environ.get("OPENROUTER_API_KEY")
 GOOGLE_KEY = os.environ.get("GOOGLE_API_KEY")
-NGROK_URL = os.environ.get("NGROK_URL", "")
 
 OR_MODELS = [
     "google/gemma-3-27b-it:free",
@@ -13,17 +12,20 @@ OR_MODELS = [
     "openrouter/free",
 ]
 
-def try_ngrok(messages):
-    if not NGROK_URL:
+def try_groq(messages):
+    GROQ_KEY = os.environ.get("GROQ_API_KEY")
+    if not GROQ_KEY:
         return None
     try:
         res = requests.post(
-            NGROK_URL,
-            json={"model": "local", "messages": messages, "temperature": 0.7},
-            timeout=5
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {GROQ_KEY}"},
+            json={"model": "llama-3.3-70b-versatile", "messages": messages},
+            timeout=15
         )
-        if res.status_code == 200:
-            return res.json()['choices'][0]['message']['content']
+        ans = res.json()
+        if 'choices' in ans:
+            return ans['choices'][0]['message']['content']
     except:
         pass
     return None
@@ -79,20 +81,18 @@ def try_google(messages):
     return None
 
 def get_status():
+    GROQ_KEY = os.environ.get("GROQ_API_KEY")
     return {
+        "GROQ_KEY": "OK" if GROQ_KEY else "MISSING",
         "OR_KEY": "OK" if OR_KEY else "MISSING",
-        "GOOGLE_KEY": "OK" if GOOGLE_KEY else "MISSING",
-        "NGROK_URL": NGROK_URL if NGROK_URL else "NOT SET"
+        "GOOGLE_KEY": "OK" if GOOGLE_KEY else "MISSING"
     }
 
 def call_llm(messages: list) -> str:
-    result = try_ngrok(messages)
+    result = try_groq(messages)
     if result: return result
-
     result = try_openrouter(messages)
     if result: return result
-
     result = try_google(messages)
     if result: return result
-
     return "[ERROR]: Todos los modelos fallaron."
