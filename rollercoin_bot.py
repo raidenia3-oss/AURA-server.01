@@ -1,5 +1,4 @@
 import os
-import json
 import time
 import random
 import requests
@@ -30,15 +29,21 @@ def send_whatsapp(msg):
 
 def get_new_token():
     try:
+        # El refresh token es un JWT, no JSON — usarlo directamente
         res = requests.post(
             f"{BASE_URL}/user/auth/refresh-token",
-            json={"refreshToken": REFRESH_TOKEN},
+            json={"refreshToken": REFRESH_TOKEN.strip()},
             headers=HEADERS,
             timeout=10
         )
+        print(f"Status: {res.status_code}")
+        print(f"Response: {res.text[:200]}")
         data = res.json()
-        token = data.get("token") or data.get("accessToken") or data.get("data", {}).get("token")
-        print(f"Token: {token[:30] if token else 'ERROR'}")
+        token = (data.get("token") or 
+                 data.get("accessToken") or 
+                 data.get("data", {}).get("token") or
+                 data.get("jwt"))
+        print(f"Token obtenido: {'OK' if token else 'NONE'}")
         return token
     except Exception as e:
         print(f"Error token: {e}")
