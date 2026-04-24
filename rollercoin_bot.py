@@ -10,7 +10,6 @@ WHATSAPP_APIKEY = os.environ.get("WHATSAPP_APIKEY", "")
 
 def send_whatsapp(msg):
     if not WHATSAPP_NUMBER or not WHATSAPP_APIKEY:
-        print("WhatsApp no configurado")
         return
     try:
         requests.get(
@@ -24,7 +23,6 @@ def send_whatsapp(msg):
 def load_cookies():
     try:
         cookies_data = json.loads(RC_COOKIES)
-        # Convertir formato EditThisCookie a Playwright
         pw_cookies = []
         for c in cookies_data:
             pw_cookies.append({
@@ -48,7 +46,6 @@ def run_bot():
         browser = p.chromium.launch(headless=True)
         context = browser.new_context()
 
-        # Cargar cookies
         cookies = load_cookies()
         if cookies:
             context.add_cookies(cookies)
@@ -59,80 +56,61 @@ def run_bot():
             return
 
         page = context.new_page()
-
-        # Ir a RollerCoin
-        print("Abriendo RollerCoin...")
         page.goto("https://rollercoin.com/", timeout=30000)
         page.wait_for_timeout(3000)
 
-        # Verificar login
         if "login" in page.url.lower():
-            report.append("❌ Sesión expirada — necesitas renovar cookies")
+            report.append("❌ Sesión expirada — renueva las cookies")
             send_whatsapp("\n".join(report))
             browser.close()
             return
 
-        print("✅ Sesión activa")
         report.append("✅ Sesión activa")
 
-        # Ir al dashboard
-        page.goto("https://rollercoin.com/dashboard", timeout=30000)
-        page.wait_for_timeout(3000)
-
-        # Recolectar recompensas diarias
+        # Recompensa diaria
         try:
+            page.goto("https://rollercoin.com/dashboard", timeout=30000)
+            page.wait_for_timeout(3000)
             daily = page.locator("text=Claim").first
             if daily.is_visible():
                 daily.click()
                 page.wait_for_timeout(2000)
                 report.append("🎁 Recompensa diaria reclamada")
-                print("Recompensa diaria reclamada")
             else:
-                report.append("⏳ Recompensa diaria ya reclamada")
+                report.append("⏳ Recompensa ya reclamada hoy")
         except:
             report.append("⏳ Sin recompensa disponible")
 
-        # Ir a juegos
+        # Juegos
         try:
             page.goto("https://rollercoin.com/game", timeout=30000)
             page.wait_for_timeout(3000)
-
-            # Buscar juegos disponibles
-            games = page.locator(".game-item, [class*='game']").all()
             games_played = 0
+            games = page.locator(".game-item").all()
 
-            for i, game in enumerate(games[:3]):  # máximo 3 juegos
+            for i, game in enumerate(games[:3]):
                 try:
                     game.click()
                     page.wait_for_timeout(5000)
-
-                    # Buscar botón de play
-                    play_btn = page.locator("text=Play, text=PLAY, button:has-text('Play')").first
+                    play_btn = page.locator("button:has-text('Play')").first
                     if play_btn.is_visible():
                         play_btn.click()
-                        page.wait_for_timeout(15000)  # esperar que termine el juego
+                        page.wait_for_timeout(15000)
                         games_played += 1
-                        print(f"Juego {i+1} completado")
-
                     page.go_back()
                     page.wait_for_timeout(2000)
-                except Exception as e:
-                    print(f"Error en juego {i+1}: {e}")
+                except:
                     continue
 
             report.append(f"🎮 Juegos completados: {games_played}")
-
         except Exception as e:
-            report.append(f"⚠️ Error en juegos: {str(e)[:50]}")
+            report.append(f"⚠️ Error juegos: {str(e)[:50]}")
 
-        # Screenshot para debug
-        page.screenshot(path="rollercoin_screenshot.png")
         browser.close()
 
     report.append("— AURA Bot v1.0")
-    final_report = "\n".join(report)
-    print(final_report)
-    send_whatsapp(final_report)
+    send_whatsapp("\n".join(report))
+    print("\n".join(report))
 
 if __name__ == "__main__":
     run_bot()

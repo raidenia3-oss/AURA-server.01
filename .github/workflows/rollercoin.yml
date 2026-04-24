@@ -1,4 +1,3 @@
-
 name: AURA RollerCoin Bot
 
 on:
@@ -18,7 +17,7 @@ jobs:
         run: |
           pip install playwright requests
           playwright install chromium
-      - name: Run RollerCoin Bot
+      - name: Run bot
         env:
           RC_COOKIES: ${{ secrets.RC_COOKIES }}
           RC_EMAIL: ${{ secrets.RC_EMAIL }}
