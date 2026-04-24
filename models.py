@@ -53,21 +53,20 @@ def try_openrouter(messages):
     return None
 
 def try_google(messages):
+    GOOGLE_KEY = os.environ.get("GOOGLE_API_KEY")
     if not GOOGLE_KEY:
         return None
     try:
         google_messages = [
-            {
-                "role": m["role"] if m["role"] != "system" else "user",
-                "parts": [{"text": m["content"]}]
-            }
+            {"role": m["role"] if m["role"] != "system" else "user",
+             "parts": [{"text": m["content"]}]}
             for m in messages if m["role"] != "system"
         ]
         system_text = next(
             (m["content"] for m in messages if m["role"] == "system"), ""
         )
         res = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key={GOOGLE_KEY}",
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GOOGLE_KEY}",
             json={
                 "system_instruction": {"parts": [{"text": system_text}]},
                 "contents": google_messages
@@ -89,10 +88,10 @@ def get_status():
     }
 
 def call_llm(messages: list) -> str:
-    result = try_groq(messages)
+    result = try_google(messages)    # Gemini primero
     if result: return result
-    result = try_openrouter(messages)
+    result = try_groq(messages)      # Groq segundo
     if result: return result
-    result = try_google(messages)
+    result = try_openrouter(messages)# OpenRouter último
     if result: return result
     return "[ERROR]: Todos los modelos fallaron."

@@ -56,15 +56,17 @@ def run_bot():
             return
 
         page = context.new_page()
-        page.goto("https://rollercoin.com/", timeout=30000)
-        page.wait_for_timeout(3000)
-
-        if "login" in page.url.lower():
-            report.append("❌ Sesión expirada — renueva las cookies")
+        # Verificar login correctamente
+        page.goto("https://rollercoin.com/dashboard", timeout=30000)
+        page.wait_for_timeout(4000)
+        # RollerCoin redirige a / o muestra login si no hay sesión
+        current_url = page.url
+        print(f"URL actual: {current_url}")
+        if "dashboard" not in current_url and "game" not in current_url:
+            report.append(f"❌ Sesión expirada (URL: {current_url})")
             send_whatsapp("\n".join(report))
             browser.close()
             return
-
         report.append("✅ Sesión activa")
 
         # Recompensa diaria
