@@ -1,0 +1,27 @@
+
+name: AURA RollerCoin Bot
+
+on:
+  schedule:
+    - cron: '0 */8 * * *'
+  workflow_dispatch:
+
+jobs:
+  play:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install playwright requests
+          playwright install chromium
+      - name: Run RollerCoin Bot
+        env:
+          RC_COOKIES: ${{ secrets.RC_COOKIES }}
+          RC_EMAIL: ${{ secrets.RC_EMAIL }}
+          WHATSAPP_NUMBER: ${{ secrets.WHATSAPP_NUMBER }}
+          WHATSAPP_APIKEY: ${{ secrets.WHATSAPP_APIKEY }}
+        run: python rollercoin_bot.py
