@@ -5,10 +5,10 @@ OR_KEY = os.environ.get("OPENROUTER_API_KEY")
 GOOGLE_KEY = os.environ.get("GOOGLE_API_KEY")
 
 OR_MODELS = [
+    "google/gemini-2.0-flash-exp:free",  # Gemini gratis
+    "deepseek/deepseek-r1:free",          # Muy bueno para razonar
     "google/gemma-3-27b-it:free",
     "mistralai/mistral-7b-instruct:free",
-    "microsoft/phi-3-mini-128k-instruct:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
     "openrouter/free",
 ]
 
