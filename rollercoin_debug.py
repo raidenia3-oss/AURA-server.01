@@ -1,6 +1,5 @@
 import os
 import json
-import requests
 from playwright.sync_api import sync_playwright
 
 RC_COOKIES = os.environ.get("RC_COOKIES", "")
@@ -8,8 +7,13 @@ RC_COOKIES = os.environ.get("RC_COOKIES", "")
 def load_cookies():
     try:
         cookies_data = json.loads(RC_COOKIES)
-        return [{"name": c["name"], "value": c["value"], "domain": c.get("domain", ".rollercoin.com"), "path": c.get("path", "/"), "httpOnly": c.get("httpOnly", False), "secure": c.get("secure", True)} for c in cookies_data]
-    except:
+        return [{"name": c["name"], "value": c["value"], 
+                 "domain": c.get("domain", ".rollercoin.com"),
+                 "path": c.get("path", "/"),
+                 "httpOnly": c.get("httpOnly", False),
+                 "secure": c.get("secure", True)} for c in cookies_data]
+    except Exception as e:
+        print(f"Error: {e}")
         return []
 
 with sync_playwright() as p:
@@ -21,20 +25,22 @@ with sync_playwright() as p:
     page.goto("https://rollercoin.com/game", timeout=30000)
     page.wait_for_timeout(5000)
     
-    # Guardar HTML para analizar
-    html = page.content()
-    with open("game_page.html", "w") as f:
-        f.write(html)
+    print("URL:", page.url)
+    print("Titulo:", page.title())
     
-    # Captura de pantalla
-    page.screenshot(path="game_page.png", full_page=True)
-    print("HTML y screenshot guardados")
-    print("URL actual:", page.url)
+    # Imprimir todos los elementos clickeables
+    buttons = page.locator("button, a, [onclick]").all()
+    print(f"\nBotones encontrados: {len(buttons)}")
+    for i, btn in enumerate(buttons[:20]):
+        try:
+            text = btn.inner_text()
+            cls = btn.get_attribute("class") or ""
+            href = btn.get_attribute("href") or ""
+            if text.strip():
+                print(f"  [{i}] texto='{text.strip()[:50]}' class='{cls[:50]}' href='{href[:50]}'")
+        except:
+            continue
     
-    # Buscar elementos de juego
-    elements = page.locator("[class*='game'], [class*='Game'], [id*='game']").all()
-    print(f"Elementos encontrados: {len(elements)}")
-    for i, el in enumerate(elements[:5]):
-        print(f"  {i}: {el.get_attribute('class')}")
-    
+    page.screenshot(path="debug.png", full_page=True)
+    print("\nScreenshot guardado")
     browser.close()
