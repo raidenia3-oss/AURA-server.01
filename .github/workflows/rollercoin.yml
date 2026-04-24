@@ -14,25 +14,10 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: |
-          pip install playwright requests
-          playwright install chromium
-      - name: Run debug
-        env:
-          RC_COOKIES: ${{ secrets.RC_COOKIES }}
-        run: python rollercoin_debug.py
-
+        run: pip install requests
       - name: Run bot
         env:
-          RC_COOKIES: ${{ secrets.RC_COOKIES }}
-          RC_EMAIL: ${{ secrets.RC_EMAIL }}
+          RC_REFRESH_TOKEN: ${{ secrets.RC_REFRESH_TOKEN }}
           WHATSAPP_NUMBER: ${{ secrets.WHATSAPP_NUMBER }}
           WHATSAPP_APIKEY: ${{ secrets.WHATSAPP_APIKEY }}
         run: python rollercoin_bot.py
-
-      - name: Upload debug
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: debug
-          path: debug.png
