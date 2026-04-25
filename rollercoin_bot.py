@@ -28,26 +28,31 @@ def send_whatsapp(msg):
         pass
 
 def get_new_token():
-    try:
-        # El refresh token es un JWT, no JSON — usarlo directamente
-        res = requests.post(
-            f"{BASE_URL}/user/auth/refresh-token",
-            json={"refreshToken": REFRESH_TOKEN.strip()},
-            headers=HEADERS,
-            timeout=10
-        )
-        print(f"Status: {res.status_code}")
-        print(f"Response: {res.text[:200]}")
-        data = res.json()
-        token = (data.get("token") or 
-                 data.get("accessToken") or 
-                 data.get("data", {}).get("token") or
-                 data.get("jwt"))
-        print(f"Token obtenido: {'OK' if token else 'NONE'}")
-        return token
-    except Exception as e:
-        print(f"Error token: {e}")
-        return None
+    endpoints = [
+        "/user/auth/refresh-token",
+        "/user/refresh-token", 
+        "/auth/refresh-token",
+        "/user/token/refresh",
+    ]
+    for endpoint in endpoints:
+        try:
+            res = requests.post(
+                f"{BASE_URL}{endpoint}",
+                json={"refreshToken": REFRESH_TOKEN.strip()},
+                headers=HEADERS,
+                timeout=10
+            )
+            print(f"{endpoint}: {res.status_code} - {res.text[:100]}")
+            if res.status_code == 200:
+                data = res.json()
+                token = (data.get("token") or
+                         data.get("accessToken") or
+                         data.get("data", {}).get("token"))
+                if token:
+                    return token
+        except Exception as e:
+            print(f"Error {endpoint}: {e}")
+    return None
 
 def get_user_info(token):
     try:
