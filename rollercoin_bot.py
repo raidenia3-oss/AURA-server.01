@@ -1,13 +1,15 @@
 import os
+import json
 import time
 import random
 import requests
+from playwright.sync_api import sync_playwright
 
-REFRESH_TOKEN = os.environ.get("RC_REFRESH_TOKEN", "")
+REFRESH_TOKEN = os.environ.get("RC_REFRESH_TOKEN", "").strip()
 WHATSAPP_NUMBER = os.environ.get("WHATSAPP_NUMBER", "")
 WHATSAPP_APIKEY = os.environ.get("WHATSAPP_APIKEY", "")
 
-BASE_URL = "https://rollercoin.com/api"
+BASE_URL = "https://rollercoin.com"
 HEADERS = {
     "Content-Type": "application/json",
     "Origin": "https://rollercoin.com",
@@ -27,130 +29,111 @@ def send_whatsapp(msg):
     except:
         pass
 
-def get_new_token():
-    endpoints = [
-        "/user/auth/refresh-token",
-        "/user/refresh-token", 
-        "/auth/refresh-token",
-        "/user/token/refresh",
-    ]
-    for endpoint in endpoints:
-        try:
-            res = requests.post(
-                f"{BASE_URL}{endpoint}",
-                json={"refreshToken": REFRESH_TOKEN.strip()},
-                headers=HEADERS,
-                timeout=10
-            )
-            print(f"{endpoint}: {res.status_code} - {res.text[:100]}")
-            if res.status_code == 200:
-                data = res.json()
-                token = (data.get("token") or
-                         data.get("accessToken") or
-                         data.get("data", {}).get("token"))
-                if token:
-                    return token
-        except Exception as e:
-            print(f"Error {endpoint}: {e}")
-    return None
-
-def get_user_info(token):
-    try:
-        res = requests.get(
-            f"{BASE_URL}/user/me",
-            headers={**HEADERS, "Authorization": f"Bearer {token}"},
-            timeout=10
-        )
-        return res.json()
-    except:
-        return {}
-
-def claim_daily(token):
-    try:
-        res = requests.post(
-            f"{BASE_URL}/user/claim-daily-bonus",
-            headers={**HEADERS, "Authorization": f"Bearer {token}"},
-            timeout=10
-        )
-        print(f"Daily: {res.status_code} {res.text[:100]}")
-        return res.status_code == 200
-    except Exception as e:
-        print(f"Error daily: {e}")
-        return False
-
-def get_games(token):
-    try:
-        res = requests.get(
-            f"{BASE_URL}/game/user-games",
-            headers={**HEADERS, "Authorization": f"Bearer {token}"},
-            timeout=10
-        )
-        print(f"Games response: {res.text[:300]}")
-        return res.json()
-    except:
-        return {}
-
-def play_game(token, game_id):
-    try:
-        res = requests.post(
-            f"{BASE_URL}/game/start",
-            json={"gameId": game_id},
-            headers={**HEADERS, "Authorization": f"Bearer {token}"},
-            timeout=10
-        )
-        print(f"Start {game_id}: {res.text[:100]}")
-        time.sleep(5)
-        score = random.randint(50, 200)
-        res2 = requests.post(
-            f"{BASE_URL}/game/finish",
-            json={"gameId": game_id, "score": score},
-            headers={**HEADERS, "Authorization": f"Bearer {token}"},
-            timeout=10
-        )
-        print(f"Finish {game_id}: {res2.text[:100]}")
-        return True
-    except Exception as e:
-        print(f"Error juego {game_id}: {e}")
-        return False
-
 def run_bot():
     report = ["◈ AURA — REPORTE ROLLERCOIN"]
 
-    if not REFRESH_TOKEN:
-        report.append("❌ RC_REFRESH_TOKEN no configurado")
-        send_whatsapp("\n".join(report))
-        return
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        )
+        page = context.new_page()
 
-    token = get_new_token()
-    if not token:
-        report.append("❌ No se pudo obtener token")
-        send_whatsapp("\n".join(report))
-        return
+        # Ir a RollerCoin primero para que el dominio esté activo
+        page.goto("https://rollercoin.com/", timeout=30000)
+        page.wait_for_timeout(2000)
 
-    report.append("✅ Sesión activa")
+        # Inyectar token JWT en localStorage
+        page.evaluate(f'''
+            localStorage.setItem('token', '{REFRESH_TOKEN}');
+            localStorage.setItem('refreshToken', '{REFRESH_TOKEN}');
+        ''')
 
-    user = get_user_info(token)
-    balance = user.get("balance", "?")
-    report.append(f"💰 Balance: {balance} RLT")
+        # Recargar con el token inyectado
+        page.goto("https://rollercoin.com/dashboard", timeout=30000)
+        page.wait_for_timeout(4000)
 
-    if claim_daily(token):
-        report.append("🎁 Recompensa diaria reclamada")
-    else:
-        report.append("⏳ Recompensa ya reclamada")
+        current_url = page.url
+        print(f"URL: {current_url}")
 
-    games_data = get_games(token)
-    games_played = 0
-    games_list = games_data.get("games", games_data.get("data", []))
+        if "dashboard" not in current_url:
+            report.append(f"❌ Sesión falló (URL: {current_url})")
+            send_whatsapp("\n".join(report))
+            browser.close()
+            return
 
-    if isinstance(games_list, list):
-        for game in games_list[:3]:
-            game_id = game.get("id") or game.get("gameId") or game.get("_id")
-            if game_id and play_game(token, game_id):
-                games_played += 1
+        report.append("✅ Sesión activa")
 
-    report.append(f"🎮 Juegos completados: {games_played}")
-    report.append("— AURA Bot v2.0")
+        # Obtener balance
+        try:
+            balance = page.locator("[class*='balance'], [class*='hash']").first.inner_text()
+            report.append(f"⚡ Poder: {balance}")
+        except:
+            pass
 
+        # Recompensa diaria
+        try:
+            page.goto("https://rollercoin.com/dashboard", timeout=30000)
+            page.wait_for_timeout(3000)
+            claim = page.locator("text=Claim, text=CLAIM").first
+            if claim.is_visible():
+                claim.click()
+                page.wait_for_timeout(2000)
+                report.append("🎁 Recompensa diaria reclamada")
+            else:
+                report.append("⏳ Recompensa ya reclamada")
+        except:
+            report.append("⏳ Sin recompensa disponible")
+
+        # Ir a juegos
+        try:
+            page.goto("https://rollercoin.com/game/choose_game", timeout=30000)
+            page.wait_for_timeout(4000)
+
+            games_played = 0
+            # Buscar botones START
+            start_buttons = page.locator("button:has-text('START'), a:has-text('START')").all()
+            print(f"Botones START encontrados: {len(start_buttons)}")
+
+            for i, btn in enumerate(start_buttons[:3]):
+                try:
+                    print(f"Jugando juego {i+1}...")
+                    btn.click()
+                    page.wait_for_timeout(3000)
+
+                    # Esperar que cargue el juego
+                    page.wait_for_url("**/play_game**", timeout=10000)
+                    page.wait_for_timeout(2000)
+
+                    # Buscar botón START dentro del juego
+                    inner_start = page.locator("text=START, text=Start").first
+                    if inner_start.is_visible():
+                        inner_start.click()
+                        print(f"Juego {i+1} iniciado, esperando...")
+                        # Esperar que termine (máximo 60 segundos)
+                        page.wait_for_timeout(60000)
+                        games_played += 1
+
+                    # Volver a elegir juego
+                    page.goto("https://rollercoin.com/game/choose_game", timeout=30000)
+                    page.wait_for_timeout(3000)
+
+                except Exception as e:
+                    print(f"Error juego {i+1}: {e}")
+                    page.goto("https://rollercoin.com/game/choose_game", timeout=30000)
+                    page.wait_for_timeout(2000)
+                    continue
+
+            report.append(f"🎮 Juegos completados: {games_played}")
+
+        except Exception as e:
+            report.append(f"⚠️ Error juegos: {str(e)[:80]}")
+
+        # Screenshot final
+        page.screenshot(path="final.png")
+        browser.close()
+
+    report.append("— AURA Bot v3.0")
     final = "\n".join(report)
     print(final)
     send_whatsapp(final)

@@ -14,10 +14,18 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: pip install requests
+        run: |
+          pip install playwright requests
+          playwright install chromium
       - name: Run bot
         env:
           RC_REFRESH_TOKEN: ${{ secrets.RC_REFRESH_TOKEN }}
           WHATSAPP_NUMBER: ${{ secrets.WHATSAPP_NUMBER }}
           WHATSAPP_APIKEY: ${{ secrets.WHATSAPP_APIKEY }}
         run: python rollercoin_bot.py
+      - name: Upload screenshot
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshot
+          path: final.png

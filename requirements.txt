@@ -1,8 +1,2 @@
-fastapi
-uvicorn
 requests
-upstash-vector
-upstash-redis
-duckduckgo-search
-beautifulsoup4
-lxml
+playwright
