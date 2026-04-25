@@ -29,6 +29,33 @@ def send_whatsapp(msg):
     except:
         pass
 
+def get_new_token():
+    # RollerCoin API real encontrada en el código fuente
+    endpoints = [
+        "https://rollercoin.com/api/user/token",
+        "https://rollercoin.com/api/user/auth/token",
+        "https://rollercoin.com/api/auth/token",
+    ]
+    for url in endpoints:
+        try:
+            res = requests.post(
+                url,
+                json={"refreshToken": REFRESH_TOKEN},
+                headers=HEADERS,
+                timeout=10
+            )
+            print(f"{url}: {res.status_code} - {res.text[:150]}")
+            if res.status_code == 200:
+                data = res.json()
+                token = (data.get("token") or
+                         data.get("accessToken") or
+                         data.get("data", {}).get("token"))
+                if token:
+                    return token
+        except Exception as e:
+            print(f"Error {url}: {e}")
+    return None
+
 def run_bot():
     report = ["◈ AURA — REPORTE ROLLERCOIN"]
 
@@ -39,22 +66,20 @@ def run_bot():
         )
         page = context.new_page()
 
-        # Ir a RollerCoin primero para que el dominio esté activo
         page.goto("https://rollercoin.com/", timeout=30000)
         page.wait_for_timeout(2000)
 
-        # Inyectar token JWT en localStorage
-        page.evaluate(f'''
-            localStorage.setItem('token', '{REFRESH_TOKEN}');
+        # Inyectar refreshToken — RollerCoin lo usa para obtener accessToken automáticamente
+        page.evaluate(f"""
             localStorage.setItem('refreshToken', '{REFRESH_TOKEN}');
-        ''')
+        """)
 
-        # Recargar con el token inyectado
         page.goto("https://rollercoin.com/dashboard", timeout=30000)
-        page.wait_for_timeout(4000)
+        page.wait_for_timeout(6000)
 
         current_url = page.url
         print(f"URL: {current_url}")
+        page.screenshot(path="final.png")
 
         if "dashboard" not in current_url:
             report.append(f"❌ Sesión falló (URL: {current_url})")
@@ -64,18 +89,9 @@ def run_bot():
 
         report.append("✅ Sesión activa")
 
-        # Obtener balance
-        try:
-            balance = page.locator("[class*='balance'], [class*='hash']").first.inner_text()
-            report.append(f"⚡ Poder: {balance}")
-        except:
-            pass
-
         # Recompensa diaria
         try:
-            page.goto("https://rollercoin.com/dashboard", timeout=30000)
-            page.wait_for_timeout(3000)
-            claim = page.locator("text=Claim, text=CLAIM").first
+            claim = page.locator("text=Claim").first
             if claim.is_visible():
                 claim.click()
                 page.wait_for_timeout(2000)
@@ -83,57 +99,44 @@ def run_bot():
             else:
                 report.append("⏳ Recompensa ya reclamada")
         except:
-            report.append("⏳ Sin recompensa disponible")
+            report.append("⏳ Sin recompensa")
 
-        # Ir a juegos
+        # Juegos
         try:
             page.goto("https://rollercoin.com/game/choose_game", timeout=30000)
             page.wait_for_timeout(4000)
 
             games_played = 0
-            # Buscar botones START
-            start_buttons = page.locator("button:has-text('START'), a:has-text('START')").all()
-            print(f"Botones START encontrados: {len(start_buttons)}")
+            start_buttons = page.locator("button:has-text('START')").all()
+            print(f"Botones START: {len(start_buttons)}")
 
             for i, btn in enumerate(start_buttons[:3]):
                 try:
-                    print(f"Jugando juego {i+1}...")
                     btn.click()
                     page.wait_for_timeout(3000)
-
-                    # Esperar que cargue el juego
                     page.wait_for_url("**/play_game**", timeout=10000)
                     page.wait_for_timeout(2000)
 
-                    # Buscar botón START dentro del juego
-                    inner_start = page.locator("text=START, text=Start").first
+                    inner_start = page.locator("text=START").first
                     if inner_start.is_visible():
                         inner_start.click()
-                        print(f"Juego {i+1} iniciado, esperando...")
-                        # Esperar que termine (máximo 60 segundos)
                         page.wait_for_timeout(60000)
                         games_played += 1
 
-                    # Volver a elegir juego
                     page.goto("https://rollercoin.com/game/choose_game", timeout=30000)
                     page.wait_for_timeout(3000)
-
                 except Exception as e:
                     print(f"Error juego {i+1}: {e}")
                     page.goto("https://rollercoin.com/game/choose_game", timeout=30000)
                     page.wait_for_timeout(2000)
-                    continue
 
             report.append(f"🎮 Juegos completados: {games_played}")
-
         except Exception as e:
             report.append(f"⚠️ Error juegos: {str(e)[:80]}")
 
-        # Screenshot final
-        page.screenshot(path="final.png")
         browser.close()
 
-    report.append("— AURA Bot v3.0")
+    report.append("— AURA Bot v3.1")
     final = "\n".join(report)
     print(final)
     send_whatsapp(final)
