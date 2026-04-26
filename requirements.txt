@@ -1,2 +1,9 @@
+fastapi
+uvicorn
 requests
-playwright
+upstash-vector
+upstash-redis
+duckduckgo-search
+beautifulsoup4
+lxml
+python-dotenv
