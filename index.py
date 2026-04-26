@@ -38,7 +38,7 @@ async def get_news():
         news = search_bbc() + search_tech_news()
         if not news:
             return {"news": []}
-        lines = [l.strip() for l in news.strip().split("\n") if l.strip()]
+        lines = [l.strip() for l in news.strip().split("\\n") if l.strip()]
         return {"news": lines[:6]}
     except Exception as e:
         return {"news": [], "error": str(e)}
@@ -149,7 +149,7 @@ HTML_CHAT = """
             <div class="sidebar-title">◈ COMANDOS</div>
             <button class="sidebar-btn" onclick="quickCmd('busca: noticias mundiales urgentes hoy')">🌍 Mundial</button>
             <button class="sidebar-btn" onclick="loadMarkets()">📈 Mercados</button>
-            <button class="sidebar-btn" onclick="quickCmd('busca: últimas noticias tecnología')">💻 Tech</button>
+            <button class="sidebar-btn" onclick="quickCmd('busca: últimas noticias tecnologia')">💻 Tech</button>
             <button class="sidebar-btn" onclick="quickCmd('busca: precio GPU Nvidia hoy')">🔧 Hardware</button>
             <button class="sidebar-btn" onclick="quickCmd('qué es ')">📖 Wikipedia</button>
             <button class="sidebar-btn" onclick="quickCmd('estado rollercoin')">🎮 RollerCoin</button>
@@ -159,8 +159,8 @@ HTML_CHAT = """
             <button class="sidebar-btn" onclick="document.getElementById('fileInput').click()">📎 Archivo</button>
             <input type="file" id="fileInput" accept=".cpp,.c,.py,.txt,.js,.ts,.md,.json" style="display:none" onchange="handleFile()">
             <div class="sidebar-title">◈ CÓDIGO</div>
-            <button class="sidebar-btn" onclick="quickCmd('ejecuta este código python: print("Hola AURA")')">▶ Ejecutar Python</button>
-            <button class="sidebar-btn" onclick="quickCmd('ejecuta este código cpp: #include<iostream>\nint main(){std::cout<<"Hola";return 0;}')">▶ Ejecutar C++</button>
+            <button class="sidebar-btn" onclick="quickCmd('ejecuta este código python: print(\"Hola AURA\")')">▶ Ejecutar Python</button>
+            <button class="sidebar-btn" onclick="quickCmd('ejecuta este código cpp: #include<iostream>\\nint main(){std::cout<<\"Hola\";return 0;}')">▶ Ejecutar C++</button>
             <div class="sidebar-title">◈ ESTADO</div>
             <div style="font-size:10px; color:#333; padding:5px 8px;" id="mem-status">Noticias: --</div>
             <div style="font-size:10px; color:#00aa2a; padding:5px 8px;">Búsqueda: activa</div>
@@ -220,7 +220,7 @@ HTML_CHAT = """
                         const res = await fetch('/news');
                         const data = await res.json();
                         if (data.news && data.news.length > 0) {
-                            new Notification('AURA', { body: data.news[0].replace(/\[.*?\]/g,'').trim() });
+                            new Notification('AURA', { body: data.news[0].replace(/\\[.*?\\]/g,'').trim() });
                         }
                     } catch(e) {}
                 }, 10 * 60 * 1000);
@@ -280,7 +280,7 @@ HTML_CHAT = """
         function speak(text) {
             if (!window.speechSynthesis) return;
             window.speechSynthesis.cancel();
-            const utt = new SpeechSynthesisUtterance(text.replace(/[*#`\[\]]/g,'').substring(0,300));
+            const utt = new SpeechSynthesisUtterance(text.replace(/[*#`\\[\\]]/g,'').substring(0,300));
             utt.lang = 'es-ES'; utt.rate = 1.1;
             const voices = window.speechSynthesis.getVoices();
             const v = voices.find(v => v.lang.startsWith('es') && (v.name.includes('Paulina')||v.name.includes('Monica')||v.name.includes('Laura')))
@@ -323,62 +323,63 @@ HTML_CHAT = """
         }
 
         async function send() {
-            if (isSending) return;
-            const val = input.value.trim();
-            if (!val) return;
-            isSending = true;
-            input.value = '';
-            sendBtn.disabled = true;
-            sendBtn.textContent = '...';
-            addMsg('user', val + (fileName ? ' [📄 ' + fileName + ']' : ''));
-            typingEl.classList.add('show');
-            chat.scrollTop = chat.scrollHeight;
-            setStatus('PROCESANDO', 'active');
+    if (isSending) return;
+    const val = input.value.trim();
+    if (!val) return;
+    
+    isSending = true;
+    input.value = '';
+    sendBtn.disabled = true;
+    sendBtn.textContent = '...';
+    
+    addMsg('user', val + (fileName ? ' [📄 ' + fileName + ']' : ''));
+    if (typingEl) typingEl.classList.add('show');
+    chat.scrollTop = chat.scrollHeight;
+    setStatus('PROCESANDO', 'active');
 
-            // Detectar si el mensaje contiene código para ejecutar
-            if (val.toLowerCase().includes('ejecuta') || val.toLowerCase().includes('ejecutar')) {
-                const codeMatch = val.match(/```[\w]*\n([\s\S]*?)```/) || 
-                                  val.match(/ejecuta.*?[:|\n]([\s\S]+)/i);
-                if (codeMatch) {
-                    const code = codeMatch[1].trim();
-                    try {
-                        const execRes = await fetch('/execute', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({code: code})
-                        });
-                        const execData = await execRes.json();
-                        addMsg('system', '⚡ Resultado de ejecución:\n' + execData.result);
-                    } catch(e) {}
-                }
-            }
+    try {
+        const res = await fetch('/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                messages: [{ role: 'user', content: val }],
+                file_content: fileContent,
+                file_name: fileName
+            })
+        });
+        const data = await res.json();
+        if (typingEl) typingEl.classList.remove('show');
+        addMsg('aura', data.content, {
+            web: data.used_search, file: data.used_file,
+            mem: data.used_memory, game: data.used_game
+        });
+        speak(data.content);
 
-            try {
-                const res = await fetch('/chat', {
+        // Ejecutar código si detecta comando
+        if (val.toLowerCase().includes('ejecuta')) {
+            const codeMatch = val.match(/ejecuta.*?:\s*([\s\S]+)/i);
+            if (codeMatch) {
+                const code = codeMatch[1].trim();
+                const execRes = await fetch('/execute', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        messages: [{ role: 'user', content: val }],
-                        file_content: fileContent,
-                        file_name: fileName
-                    })
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({code: code})
                 });
-                const data = await res.json();
-                typingEl.classList.remove('show');
-                addMsg('aura', data.content, {
-                    web: data.used_search, file: data.used_file,
-                    mem: data.used_memory, game: data.used_game
-                });
-                speak(data.content);
-            } catch(e) {
-                typingEl.classList.remove('show');
-                addMsg('system', 'Error de conexión: ' + e.message);
+                const execData = await execRes.json();
+                addMsg('system', 'Resultado: ' + execData.result);
             }
-            isSending = false;
-            sendBtn.disabled = false;
-            sendBtn.textContent = 'EJECUTAR';
-            setStatus('STANDBY', '');
         }
+    } catch(e) {
+        if (typingEl) typingEl.classList.remove('show');
+        addMsg('system', 'Error: ' + e.message);
+        console.error('Send error:', e);
+    } finally {
+        isSending = false;
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'EJECUTAR';
+        setStatus('STANDBY', '');
+    }
+}
 
         async function loadMarkets() {
             addMsg('system', 'Cargando mercados...');
@@ -415,14 +416,14 @@ async def chat(request: Request):
         file_ctx = ""
         if file_content:
             used_file = True
-            file_ctx = f"\n[Archivo: {file_name}]:\n{file_content[:5000]}"
+            file_ctx = f"\\n[Archivo: {file_name}]:\\n{file_content[:5000]}"
 
         mem_ctx = ""
         if vector_index:
             try:
                 result = vector_index.query(data=user_query, top_k=1, include_metadata=True)
                 for item in result:
-                    mem_ctx = f"\n[Memoria]: {item.metadata.get('res')}"
+                    mem_ctx = f"\\n[Memoria]: {item.metadata.get('res')}"
                     used_memory = True
             except: pass
 
@@ -444,7 +445,7 @@ async def chat(request: Request):
         game_ctx = ""
         if any(k in user_query.lower() for k in ["rollercoin", "juego", "jugar", "mining"]):
             used_game = True
-            game_ctx = "\n[JUEGO]: Módulo RollerCoin activo."
+            game_ctx = "\\n[JUEGO]: Módulo RollerCoin activo."
             if redis_client:
                 try: redis_client.lpush("aura_tasks", "check_game")
                 except: pass
