@@ -220,7 +220,7 @@ HTML_CHAT = """
                         const res = await fetch('/news');
                         const data = await res.json();
                         if (data.news && data.news.length > 0) {
-                            new Notification('AURA', { body: data.news[0].replace(/\[.*?\]/g,'').trim() });
+                            new Notification('AURA', { body: data.news[0].replace(/[.*?]/g,'').trim() });
                         }
                     } catch(e) {}
                 }, 10 * 60 * 1000);
