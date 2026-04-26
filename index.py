@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from upstash_vector import Index
 from monitor import get_world_news, get_market_summary
 from models import call_llm, get_status
+from coder import execute_code, format_result, detect_language
 
 app = FastAPI()
 
@@ -157,6 +158,9 @@ HTML_CHAT = """
             <button class="sidebar-btn" onclick="clearChat()">🗑 Limpiar</button>
             <button class="sidebar-btn" onclick="document.getElementById('fileInput').click()">📎 Archivo</button>
             <input type="file" id="fileInput" accept=".cpp,.c,.py,.txt,.js,.ts,.md,.json" style="display:none" onchange="handleFile()">
+            <div class="sidebar-title">◈ CÓDIGO</div>
+            <button class="sidebar-btn" onclick="quickCmd('ejecuta este código python: print("Hola AURA")')">▶ Ejecutar Python</button>
+            <button class="sidebar-btn" onclick="quickCmd('ejecuta este código cpp: #include<iostream>\nint main(){std::cout<<"Hola";return 0;}')">▶ Ejecutar C++</button>
             <div class="sidebar-title">◈ ESTADO</div>
             <div style="font-size:10px; color:#333; padding:5px 8px;" id="mem-status">Noticias: --</div>
             <div style="font-size:10px; color:#00aa2a; padding:5px 8px;">Búsqueda: activa</div>
@@ -330,6 +334,25 @@ HTML_CHAT = """
             typingEl.classList.add('show');
             chat.scrollTop = chat.scrollHeight;
             setStatus('PROCESANDO', 'active');
+
+            // Detectar si el mensaje contiene código para ejecutar
+            if (val.toLowerCase().includes('ejecuta') || val.toLowerCase().includes('ejecutar')) {
+                const codeMatch = val.match(/```[\w]*\n([\s\S]*?)```/) || 
+                                  val.match(/ejecuta.*?[:|\n]([\s\S]+)/i);
+                if (codeMatch) {
+                    const code = codeMatch[1].trim();
+                    try {
+                        const execRes = await fetch('/execute', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({code: code})
+                        });
+                        const execData = await execRes.json();
+                        addMsg('system', '⚡ Resultado de ejecución:\n' + execData.result);
+                    } catch(e) {}
+                }
+            }
+
             try {
                 const res = await fetch('/chat', {
                     method: 'POST',
@@ -392,14 +415,14 @@ async def chat(request: Request):
         file_ctx = ""
         if file_content:
             used_file = True
-            file_ctx = f"\\n[Archivo: {file_name}]:\\n{file_content[:5000]}"
+            file_ctx = f"\n[Archivo: {file_name}]:\n{file_content[:5000]}"
 
         mem_ctx = ""
         if vector_index:
             try:
                 result = vector_index.query(data=user_query, top_k=1, include_metadata=True)
                 for item in result:
-                    mem_ctx = f"\\n[Memoria]: {item.metadata.get('res')}"
+                    mem_ctx = f"\n[Memoria]: {item.metadata.get('res')}"
                     used_memory = True
             except: pass
 
@@ -421,7 +444,7 @@ async def chat(request: Request):
         game_ctx = ""
         if any(k in user_query.lower() for k in ["rollercoin", "juego", "jugar", "mining"]):
             used_game = True
-            game_ctx = "\\n[JUEGO]: Módulo RollerCoin activo."
+            game_ctx = "\n[JUEGO]: Módulo RollerCoin activo."
             if redis_client:
                 try: redis_client.lpush("aura_tasks", "check_game")
                 except: pass
@@ -450,3 +473,19 @@ async def chat(request: Request):
             "used_search": False, "used_file": False,
             "used_memory": False, "used_game": False
         })
+
+@app.post("/execute")
+async def execute(request: Request):
+    try:
+        data = await request.json()
+        code = data.get("code", "")
+        language = data.get("language", detect_language(code))
+        stdin = data.get("stdin", "")
+
+        if not code:
+            return JSONResponse(status_code=400, content={"error": "No hay código"})
+
+        result = execute_code(code, language, stdin)
+        return {"result": format_result(result), "raw": result}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
