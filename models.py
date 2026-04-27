@@ -3,14 +3,36 @@ import requests
 
 OR_KEY = os.environ.get("OPENROUTER_API_KEY")
 GOOGLE_KEY = os.environ.get("GOOGLE_API_KEY")
+NGROK_URL = os.environ.get("NGROK_URL")
 
 OR_MODELS = [
-    "google/gemini-2.0-flash-exp:free",  # Gemini gratis
-    "deepseek/deepseek-r1:free",          # Muy bueno para razonar
-    "google/gemma-3-27b-it:free",
+    "google/gemini-flash-1.5:free",
     "mistralai/mistral-7b-instruct:free",
-    "openrouter/free",
+    "openrouter/cinematika-7b:free",
 ]
+
+def try_ngrok(messages):
+    if not NGROK_URL:
+        return None
+    try:
+        # Formato de Ollama
+        system = next((m["content"] for m in messages if m["role"] == "system"), "")
+        user_messages = [m for m in messages if m["role"] != "system"]
+        
+        res = requests.post(
+            NGROK_URL,
+            json={
+                "model": "dolphin-llama3:8b",
+                "messages": [{"role": "system", "content": system}] + user_messages,
+                "stream": False
+            },
+            timeout=30
+        )
+        if res.status_code == 200:
+            return res.json()['message']['content']
+    except Exception as e:
+        print(f"Ollama error: {e}")
+    return None
 
 def try_groq(messages):
     GROQ_KEY = os.environ.get("GROQ_API_KEY")
@@ -20,7 +42,7 @@ def try_groq(messages):
         res = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {GROQ_KEY}"},
-            json={"model": "llama-3.3-70b-versatile", "messages": messages},
+            json={"model": "llama3-70b-8192", "messages": messages},
             timeout=15
         )
         ans = res.json()
@@ -66,7 +88,7 @@ def try_google(messages):
             (m["content"] for m in messages if m["role"] == "system"), ""
         )
         res = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GOOGLE_KEY}",
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GOOGLE_KEY}",
             json={
                 "system_instruction": {"parts": [{"text": system_text}]},
                 "contents": google_messages
@@ -84,14 +106,17 @@ def get_status():
     return {
         "GROQ_KEY": "OK" if GROQ_KEY else "MISSING",
         "OR_KEY": "OK" if OR_KEY else "MISSING",
-        "GOOGLE_KEY": "OK" if GOOGLE_KEY else "MISSING"
+        "GOOGLE_KEY": "OK" if GOOGLE_KEY else "MISSING",
+        "NGROK_URL": "OK" if NGROK_URL else "MISSING"
     }
 
 def call_llm(messages: list) -> str:
-    result = try_google(messages)    # Gemini primero
+    result = try_ngrok(messages)
     if result: return result
-    result = try_groq(messages)      # Groq segundo
+    result = try_google(messages)
     if result: return result
-    result = try_openrouter(messages)# OpenRouter último
+    result = try_groq(messages)
+    if result: return result
+    result = try_openrouter(messages)
     if result: return result
     return "[ERROR]: Todos los modelos fallaron."
