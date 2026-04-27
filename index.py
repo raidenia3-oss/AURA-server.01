@@ -60,7 +60,12 @@ async def get_world_news_endpoint():
 
 @app.get("/debug")
 async def debug():
-    return get_status()
+    from models import get_status, try_ngrok
+    status = get_status()
+    # Probar ngrok directamente
+    test = try_ngrok([{"role": "user", "content": "di solo: DOLPHIN ACTIVO"}])
+    status["ngrok_test"] = test or "FALLO"
+    return status
 
 
 HTML_CHAT = """

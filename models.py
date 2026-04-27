@@ -15,7 +15,6 @@ def try_ngrok(messages):
     if not NGROK_URL:
         return None
     try:
-        # Formato de Ollama
         system = next((m["content"] for m in messages if m["role"] == "system"), "")
         user_messages = [m for m in messages if m["role"] != "system"]
         
@@ -26,8 +25,13 @@ def try_ngrok(messages):
                 "messages": [{"role": "system", "content": system}] + user_messages,
                 "stream": False
             },
+            headers={
+                "Content-Type": "application/json",
+                "ngrok-skip-browser-warning": "true"  # Header requerido
+            },
             timeout=30
         )
+        print(f"Ngrok status: {res.status_code}")
         if res.status_code == 200:
             return res.json()['message']['content']
     except Exception as e:
