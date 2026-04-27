@@ -14,29 +14,26 @@ OR_MODELS = [
 def try_ngrok(messages):
     if not NGROK_URL:
         return None
+    
+    prompt = messages[-1]["content"] if messages else ""
+
     try:
-        system = next((m["content"] for m in messages if m["role"] == "system"), "")
-        user_messages = [m for m in messages if m["role"] != "system"]
-        
         res = requests.post(
             NGROK_URL,
-            json={
-                "model": "dolphin-llama3:8b",
-                "messages": [{"role": "system", "content": system}] + user_messages,
-                "stream": False
-            },
+            json={"message": prompt},
             headers={
                 "Content-Type": "application/json",
-                "ngrok-skip-browser-warning": "true",
-                "User-Agent": "curl/7.68.0"
+                "User-Agent": "curl/7.68.0",
+                "ngrok-skip-browser-warning": "true"
             },
-            timeout=60
+            timeout=30.0
         )
         print(f"Ngrok status: {res.status_code}")
         if res.status_code == 200:
-            return res.json()['message']['content']
+            return res.json().get("response")
     except Exception as e:
         print(f"Ollama error: {e}")
+    
     return None
 
 def try_groq(messages):
