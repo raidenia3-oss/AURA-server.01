@@ -38,7 +38,7 @@ async def get_news():
         news = search_bbc() + search_tech_news()
         if not news:
             return {"news": []}
-        lines = [l.strip() for l in news.strip().split("\\n") if l.strip()]
+        lines = [l.strip() for l in news.strip().split("\n") if l.strip()]
         return {"news": lines[:6]}
     except Exception as e:
         return {"news": [], "error": str(e)}
@@ -60,11 +60,31 @@ async def get_world_news_endpoint():
 
 @app.get("/debug")
 async def debug():
-    from models import get_status, try_ngrok
+    from models import get_status, NGROK_URL
+    import requests
     status = get_status()
-    # Probar ngrok directamente
-    test = try_ngrok([{"role": "user", "content": "di solo: DOLPHIN ACTIVO"}])
-    status["ngrok_test"] = test or "FALLO"
+    
+    # Test ngrok directamente
+    if NGROK_URL:
+        try:
+            res = requests.post(
+                NGROK_URL,
+                json={
+                    "model": "dolphin-llama3:8b",
+                    "messages": [{"role": "user", "content": "di: OK"}],
+                    "stream": False
+                },
+                headers={
+                    "Content-Type": "application/json",
+                    "ngrok-skip-browser-warning": "true"
+                },
+                timeout=60
+            )
+            status["ngrok_status"] = res.status_code
+            status["ngrok_response"] = res.text[:200]
+        except Exception as e:
+            status["ngrok_error"] = str(e)
+    
     return status
 
 
@@ -164,8 +184,8 @@ HTML_CHAT = """
             <button class="sidebar-btn" onclick="document.getElementById('fileInput').click()">📎 Archivo</button>
             <input type="file" id="fileInput" accept=".cpp,.c,.py,.txt,.js,.ts,.md,.json" style="display:none" onchange="handleFile()">
             <div class="sidebar-title">◈ CÓDIGO</div>
-            <button class="sidebar-btn" onclick="quickCmd('ejecuta este código python: print(\"Hola AURA\")')">▶ Ejecutar Python</button>
-            <button class="sidebar-btn" onclick="quickCmd('ejecuta este código cpp: #include<iostream>\\nint main(){std::cout<<\"Hola\";return 0;}')">▶ Ejecutar C++</button>
+            <button class="sidebar-btn" onclick="quickCmd('ejecuta este código python: print("Hola AURA")')">▶ Ejecutar Python</button>
+            <button class="sidebar-btn" onclick="quickCmd('ejecuta este código cpp: #include<iostream>\nint main(){std::cout<<"Hola";return 0;}')">▶ Ejecutar C++</button>
             <div class="sidebar-title">◈ ESTADO</div>
             <div style="font-size:10px; color:#333; padding:5px 8px;" id="mem-status">Noticias: --</div>
             <div style="font-size:10px; color:#00aa2a; padding:5px 8px;">Búsqueda: activa</div>
@@ -225,7 +245,7 @@ HTML_CHAT = """
                         const res = await fetch('/news');
                         const data = await res.json();
                         if (data.news && data.news.length > 0) {
-                            new Notification('AURA', { body: data.news[0].replace(/\\[.*?\\]/g,'').trim() });
+                            new Notification('AURA', { body: data.news[0].replace(/\[.*?\]/g,'').trim() });
                         }
                     } catch(e) {}
                 }, 10 * 60 * 1000);
@@ -285,7 +305,7 @@ HTML_CHAT = """
         function speak(text) {
             if (!window.speechSynthesis) return;
             window.speechSynthesis.cancel();
-            const utt = new SpeechSynthesisUtterance(text.replace(/[*#`\\[\\]]/g,'').substring(0,300));
+            const utt = new SpeechSynthesisUtterance(text.replace(/[*#`\[\]]/g,'').substring(0,300));
             utt.lang = 'es-ES'; utt.rate = 1.1;
             const voices = window.speechSynthesis.getVoices();
             const v = voices.find(v => v.lang.startsWith('es') && (v.name.includes('Paulina')||v.name.includes('Monica')||v.name.includes('Laura')))
@@ -313,7 +333,7 @@ HTML_CHAT = """
                 if (meta.mem)  tags += '<span class="tag mem">🧠 MEMORIA</span>';
                 if (meta.game) tags += '<span class="tag game">🎮 JUEGO</span>';
                 const label = type === 'aura' ? 'AURA' : 'RAIDEN';
-                div.innerHTML = '<div class="msg-header">' + label + tags + '</div><div class="msg-body">' + text.replace(/\\n/g,'<br>') + '</div>';
+                div.innerHTML = '<div class="msg-header">' + label + tags + '</div><div class="msg-body">' + text.replace(/\n/g,'<br>') + '</div>';
             }
             chat.appendChild(div);
             chat.scrollTop = chat.scrollHeight;
@@ -421,14 +441,14 @@ async def chat(request: Request):
         file_ctx = ""
         if file_content:
             used_file = True
-            file_ctx = f"\\n[Archivo: {file_name}]:\\n{file_content[:5000]}"
+            file_ctx = f"\n[Archivo: {file_name}]:\n{file_content[:5000]}"
 
         mem_ctx = ""
         if vector_index:
             try:
                 result = vector_index.query(data=user_query, top_k=1, include_metadata=True)
                 for item in result:
-                    mem_ctx = f"\\n[Memoria]: {item.metadata.get('res')}"
+                    mem_ctx = f"\n[Memoria]: {item.metadata.get('res')}"
                     used_memory = True
             except: pass
 
@@ -450,7 +470,7 @@ async def chat(request: Request):
         game_ctx = ""
         if any(k in user_query.lower() for k in ["rollercoin", "juego", "jugar", "mining"]):
             used_game = True
-            game_ctx = "\\n[JUEGO]: Módulo RollerCoin activo."
+            game_ctx = "\n[JUEGO]: Módulo RollerCoin activo."
             if redis_client:
                 try: redis_client.lpush("aura_tasks", "check_game")
                 except: pass

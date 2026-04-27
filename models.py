@@ -29,7 +29,7 @@ def try_ngrok(messages):
                 "Content-Type": "application/json",
                 "ngrok-skip-browser-warning": "true"  # Header requerido
             },
-            timeout=30
+            timeout=60
         )
         print(f"Ngrok status: {res.status_code}")
         if res.status_code == 200:
