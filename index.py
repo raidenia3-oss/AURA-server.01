@@ -1,6 +1,7 @@
 import os
 import requests
 import personality
+import httpx
 from search import smart_search
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -60,32 +61,32 @@ async def get_world_news_endpoint():
 
 @app.get("/debug")
 async def debug():
-    from models import get_status, NGROK_URL
-    import requests
-    status = get_status()
-    
-    # Test ngrok directamente
-    if NGROK_URL:
-        try:
-            res = requests.post(
-                NGROK_URL,
-                json={
-                    "model": "dolphin-llama3:8b",
-                    "messages": [{"role": "user", "content": "di: OK"}],
-                    "stream": False
-                },
+    ngrok_url = os.environ.get("NGROK_URL", "")
+    ngrok_status = None
+    ngrok_response = None
+    ngrok_error = None
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(
+                ngrok_url,
+                json={"message": "test"},
                 headers={
-                    "Content-Type": "application/json",
+                    "User-Agent": "curl/7.68.0",
                     "ngrok-skip-browser-warning": "true"
-                },
-                timeout=60
+                }
             )
-            status["ngrok_status"] = res.status_code
-            status["ngrok_response"] = res.text[:200]
-        except Exception as e:
-            status["ngrok_error"] = str(e)
-    
-    return status
+            ngrok_status = r.status_code
+            ngrok_response = r.text[:200]
+    except Exception as e:
+        ngrok_error = str(e)
+
+    return {
+        "ngrok_url": ngrok_url,
+        "ngrok_status": ngrok_status,
+        "ngrok_response": ngrok_response,
+        "ngrok_error": ngrok_error
+    }
 
 
 HTML_CHAT = """
