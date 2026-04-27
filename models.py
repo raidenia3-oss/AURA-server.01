@@ -27,8 +27,8 @@ def try_ngrok(messages):
             },
             headers={
                 "Content-Type": "application/json",
-                "ngrok-skip-browser-warning": "true",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                "bypass-tunnel-reminder": "true",
+                "User-Agent": "python-requests/2.31.0"
             },
             timeout=60
         )
