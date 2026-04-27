@@ -1,3 +1,4 @@
+
 import os
 import requests
 
@@ -22,7 +23,7 @@ def try_ngrok(messages):
             NGROK_URL,
             json={
                 "model": "dolphin-llama3:8b",
-                "prompt": prompt,
+                "messages": [{"role": "user", "content": prompt}],
                 "stream": False
             },
             headers={
@@ -30,12 +31,12 @@ def try_ngrok(messages):
                 "User-Agent": "curl/7.68.0",
                 "ngrok-skip-browser-warning": "true"
             },
-            timeout=30.0
+            timeout=60.0
         )
         print(f"Ngrok status: {res.status_code}")
         if res.status_code == 200:
             data = res.json()
-            return data.get("response", "Sin respuesta de Ollama")
+            return data["message"]["content"]
     except Exception as e:
         print(f"Ollama error: {e}")
     
