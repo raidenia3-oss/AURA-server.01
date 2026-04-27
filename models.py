@@ -18,29 +18,33 @@ def try_ngrok(messages):
     
     prompt = messages[-1]["content"] if messages else ""
 
-    try:
-        res = requests.post(
-            NGROK_URL,
-            json={
-                "model": "dolphin-llama3:8b",
-                "messages": [{"role": "user", "content": prompt}],
-                "stream": False
-            },
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "curl/7.68.0",
-                "ngrok-skip-browser-warning": "true"
-            },
-            timeout=60.0
-        )
-        print(f"Ngrok status: {res.status_code}")
-        if res.status_code == 200:
-            data = res.json()
-            return data["message"]["content"]
-    except Exception as e:
-        print(f"Ollama error: {e}")
+    for intento in range(2):  # Retry if content is empty
+        try:
+            res = requests.post(
+                NGROK_URL,
+                json={
+                    "model": "dolphin-llama3:8b",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": False
+                },
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "curl/7.68.0",
+                    "ngrok-skip-browser-warning": "true"
+                },
+                timeout=60.0
+            )
+            if res.status_code == 200:
+                data = res.json()
+                content = data.get("message", {}).get("content")
+                if content:
+                    return content
+            # If content is empty, retry
+        except Exception as e:
+            print(f"Ollama error: {e}")
+            return None # Allow fallback
     
-    return None
+    return "Ollama cargando modelo, intenta de nuevo en 5 segundos"
 
 def try_groq(messages):
     GROQ_KEY = os.environ.get("GROQ_API_KEY")
