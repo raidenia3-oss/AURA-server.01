@@ -70,7 +70,7 @@ async def debug():
         async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.post(
                 ngrok_url,
-                json={"message": "test"},
+                json={"model": "dolphin-llama3:8b", "prompt": "di hola", "stream": False},
                 headers={
                     "User-Agent": "curl/7.68.0",
                     "ngrok-skip-browser-warning": "true"

@@ -20,7 +20,11 @@ def try_ngrok(messages):
     try:
         res = requests.post(
             NGROK_URL,
-            json={"message": prompt},
+            json={
+                "model": "dolphin-llama3:8b",
+                "prompt": prompt,
+                "stream": False
+            },
             headers={
                 "Content-Type": "application/json",
                 "User-Agent": "curl/7.68.0",
@@ -30,7 +34,8 @@ def try_ngrok(messages):
         )
         print(f"Ngrok status: {res.status_code}")
         if res.status_code == 200:
-            return res.json().get("response")
+            data = res.json()
+            return data.get("response", "Sin respuesta de Ollama")
     except Exception as e:
         print(f"Ollama error: {e}")
     
