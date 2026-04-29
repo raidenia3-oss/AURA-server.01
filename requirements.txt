@@ -3,7 +3,7 @@ uvicorn
 requests
 upstash-vector
 upstash-redis
-duckduckgo-search
+ddgs
 beautifulsoup4
 lxml
 python-dotenv
