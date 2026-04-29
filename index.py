@@ -1,1 +1,493 @@
-import os\nimport requests\nimport personality\nimport httpx\nfrom search import smart_search\nfrom fastapi import FastAPI, Request\nfrom fastapi.responses import HTMLResponse, JSONResponse\nfrom upstash_vector import Index\nfrom monitor import get_world_news, get_market_summary\nfrom models import call_llm, get_status\nfrom coder import execute_code, format_result, detect_language\n\napp = FastAPI()\n\n# --- CONFIGURACION ---\ntry:\n    vector_index = Index(\n        url=os.environ.get(\"UPSTASH_VECTOR_REST_URL\"),\n        token=os.environ.get(\"UPSTASH_VECTOR_REST_TOKEN\")\n    )\nexcept Exception:\n    vector_index = None\n\ntry:\n    from upstash_redis import Redis\n    redis_client = Redis(\n        url=os.environ.get(\"UPSTASH_REDIS_REST_URL\"),\n        token=os.environ.get(\"UPSTASH_REDIS_REST_TOKEN\")\n    )\nexcept Exception:\n    redis_client = None\n\n\n# --- ENDPOINT NOTICIAS ---\n@app.get(\"/news\")\nasync def get_news():\n    try:\n        from search import search_bbc, search_tech_news\n        news = search_bbc() + search_tech_news()\n        if not news:\n            return {\"news\": []}\n        lines = [l.strip() for l in news.strip().split(\"\\n\") if l.strip()]\n        return {\"news\": lines[:6]}\n    except Exception as e:\n        return {\"news\": [], \"error\": str(e)}\n\n@app.get(\"/markets\")\nasync def get_markets():\n    try:\n        return {\"data\": get_market_summary()}\n    except Exception as e:\n        return {\"data\": f\"Error: {str(e)}\"}\n\n@app.get(\"/worldnews\")\nasync def get_world_news_endpoint():\n    try:\n        news = get_world_news()\n        return {\"news\": news}\n    except Exception as e:\n        return {\"news\": [], \"error\": str(e)}\n\n@app.get(\"/debug\")\nasync def debug():\n    ngrok_url = os.environ.get(\"NGROK_URL\", \"\")\n    ngrok_status = None\n    ngrok_response = None\n    ngrok_error = None\n\n    try:\n        async with httpx.AsyncClient(timeout=10.0) as client:\n            r = await client.post(\n                ngrok_url,\n                json={\n                    \"model\": \"dolphin-llama3:8b\",\n                    \"messages\": [{\"role\": \"user\", \"content\": \"di hola en español\"}],\n                    \"stream\": False\n                },\n                headers={\n                    \"User-Agent\": \"curl/7.68.0\",\n                    \"ngrok-skip-browser-warning\": \"true\"\n                }\n            )\n            ngrok_status = r.status_code\n            ngrok_response = r.text[:200]\n    except Exception as e:\n        ngrok_error = str(e)\n\n    return {\n        \"ngrok_url\": ngrok_url,\n        \"ngrok_status\": ngrok_status,\n        \"ngrok_response\": ngrok_response,\n        \"ngrok_error\": ngrok_error\n    }\n\n\nHTML_CHAT = \"\"\"\n<!DOCTYPE html>\n<html>\n<head>\n    <meta charset=\"UTF-8\">\n    <title>AURA CORE</title>\n    <style>\n        * { box-sizing: border-box; margin: 0; padding: 0; }\n        :root {\n            --green: #00ff41;\n            --green-dim: #00aa2a;\n            --green-dark: #002200;\n            --bg: #0a0a0a;\n            --bg2: #0f0f0f;\n            --border: #1a1a1a;\n            --text-dim: #444;\n        }\n        body { background: var(--bg); color: var(--green); font-family: \'Courier New\', monospace; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }\n        #header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 8px 20px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }\n        #header .title { font-size: 13px; letter-spacing: 4px; color: var(--green); }\n        #status { font-size: 10px; color: var(--text-dim); letter-spacing: 2px; }\n        #status.active { color: var(--green); }\n        #status.speaking { color: #00aaff; }\n        .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim); margin-right: 5px; }\n        #status.active .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }\n        #status.speaking .dot { background: #00aaff; box-shadow: 0 0 6px #00aaff; }\n        #news-ticker { background: #050505; border-bottom: 1px solid var(--border); padding: 5px 20px; font-size: 10px; color: var(--text-dim); overflow: hidden; white-space: nowrap; flex-shrink: 0; display: flex; align-items: center; gap: 10px; }\n        #news-ticker .label { color: var(--green-dim); flex-shrink: 0; letter-spacing: 2px; }\n        #ticker-content { display: inline-block; animation: ticker 40s linear infinite; }\n        @keyframes ticker { 0% { transform: translateX(100vw); } 100% { transform: translateX(-100%); } }\n        #main { display: flex; flex: 1; overflow: hidden; }\n        #sidebar { width: 200px; background: var(--bg2); border-right: 1px solid var(--border); padding: 15px 10px; display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; overflow-y: auto; }\n        .sidebar-title { font-size: 9px; color: var(--text-dim); letter-spacing: 2px; padding: 5px 8px; margin-top: 10px; }\n        .sidebar-btn { background: none; border: 1px solid var(--border); color: var(--text-dim); padding: 8px 10px; text-align: left; cursor: pointer; font-family: monospace; font-size: 11px; transition: all 0.2s; border-radius: 2px; width: 100%; }\n        .sidebar-btn:hover { border-color: var(--green-dim); color: var(--green); background: var(--green-dark); }\n        .sidebar-btn.active { border-color: var(--green); color: var(--green); background: var(--green-dark); }\n        #chat-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }\n        #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }\n        #chat::-webkit-scrollbar { width: 4px; }\n        #chat::-webkit-scrollbar-thumb { background: var(--border); }\n        .msg { max-width: 80%; padding: 12px 15px; border-radius: 2px; font-size: 12px; line-height: 1.6; border: 1px solid var(--border); animation: fadeIn 0.3s ease; }\n        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; } }\n        .msg.user { align-self: flex-end; background: var(--green-dark); border-color: var(--green-dim); }\n        .msg.aura { align-self: flex-start; background: var(--bg2); }\n        .msg.aura:hover { border-color: var(--green-dim); }\n        .msg.system { align-self: center; background: none; font-size: 10px; color: var(--text-dim); max-width: 100%; text-align: center; padding: 5px 15px; }\n        .msg-header { font-size: 10px; color: var(--green-dim); margin-bottom: 6px; letter-spacing: 1px; display: flex; align-items: center; gap: 6px; }\n        .tag { font-size: 9px; padding: 1px 5px; border-radius: 2px; }\n        .tag.web  { background: #001133; color: #4488ff; border: 1px solid #003366; }\n        .tag.file { background: #1a0a00; color: #ff8844; border: 1px solid #663300; }\n        .tag.mem  { background: #0a0a1a; color: #8844ff; border: 1px solid #330066; }\n        .tag.game { background: #001a00; color: #00ff88; border: 1px solid #006633; }\n        .msg-body { white-space: pre-wrap; }\n        #typing-indicator { padding: 8px 20px; font-size: 10px; color: var(--text-dim); display: none; flex-shrink: 0; }\n        #typing-indicator.show { display: block; }\n        .blink { animation: blink 1s infinite; }\n        @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }\n        #input-area { background: var(--bg2); border-top: 1px solid var(--border); padding: 12px 20px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; position: relative; z-index: 10; }\n        #toolbar { display: flex; gap: 8px; align-items: center; }\n        #file-name { font-size: 10px; color: var(--text-dim); flex: 1; }\n        .tool-btn { background: none; border: 1px solid var(--border); color: var(--text-dim); padding: 5px 10px; cursor: pointer; font-family: monospace; font-size: 10px; transition: all 0.2s; }\n        .tool-btn:hover { border-color: var(--green-dim); color: var(--green); }\n        .tool-btn.active { border-color: #ff4444; color: #ff4444; background: #110000; }\n        #input-row { display: flex; gap: 8px; }\n        #msgInput { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--green); padding: 10px 15px; outline: none; font-family: monospace; font-size: 12px; }\n        #msgInput:focus { border-color: var(--green-dim); }\n        #msgInput::placeholder { color: var(--text-dim); }\n        #sendBtn { background: var(--green); border: none; color: #000; padding: 10px 20px; cursor: pointer; font-family: monospace; font-weight: bold; font-size: 12px; }\n        #sendBtn:hover { background: #00cc33; }\n        #sendBtn:disabled { background: var(--green-dim); cursor: not-allowed; }\n    </style>\n</head>\n<body>\n    <div id=\"header\">\n        <div class=\"title\">◈ AURA SYSTEM v3.5</div>\n        <div id=\"status\"><span class=\"dot\"></span>STANDBY</div>\n    </div>\n    <div id=\"news-ticker\">\n        <span class=\"label\">◈ LIVE</span>\n        <span id=\"ticker-content\">Cargando noticias...</span>\n    </div>\n    <div id=\"main\">\n        <div id=\"sidebar\">\n            <div class=\"sidebar-title\">◈ COMANDOS</div>\n            <button class=\"sidebar-btn\" onclick=\"quickCmd(\'busca: noticias mundiales urgentes hoy\')\">🌍 Mundial</button>\n            <button class=\"sidebar-btn\" onclick=\"loadMarkets()\">📈 Mercados</button>\n            <button class=\"sidebar-btn\" onclick=\"quickCmd(\'busca: últimas noticias tecnologia\')\">💻 Tech</button>\n            <button class=\"sidebar-btn\" onclick=\"quickCmd(\'busca: precio GPU Nvidia hoy\')\">🔧 Hardware</button>\n            <button class=\"sidebar-btn\" onclick=\"quickCmd(\'qué es \')\">📖 Wikipedia</button>\n            <button class=\"sidebar-btn\" onclick=\"quickCmd(\'estado rollercoin\')\">🎮 RollerCoin</button>\n            <div class=\"sidebar-title\">◈ SISTEMA</div>\n            <button class=\"sidebar-btn\" id=\"notifBtn\" onclick=\"toggleNotifications()\">🔔 Alertas OFF</button>\n            <button class=\"sidebar-btn\" onclick=\"clearChat()\">🗑 Limpiar</button>\n            <button class=\"sidebar-btn\" onclick=\"document.getElementById(\'fileInput\').click()\">📎 Archivo</button>\n            <input type=\"file\" id=\"fileInput\" accept=\".cpp,.c,.py,.txt,.js,.ts,.md,.json\" style=\"display:none\" onchange=\"handleFile()\">\n            <div class=\"sidebar-title\">◈ CÓDIGO</div>\n            <button class=\"sidebar-btn\" onclick=\"quickCmd(\'ejecuta este código python: print(\"Hola AURA\")\')\">▶ Ejecutar Python</button>\n            <button class=\"sidebar-btn\" onclick=\"quickCmd(\'ejecuta este código cpp: #include<iostream>\\nint main(){std::cout<<\"Hola\";return 0;}\')\">▶ Ejecutar C++</button>\n            <div class=\"sidebar-title\">◈ ESTADO</div>\n            <div style=\"font-size:10px; color:#333; padding:5px 8px;\" id=\"mem-status\">Noticias: --</div>\n            <div style=\"font-size:10px; color:#00aa2a; padding:5px 8px;\">Búsqueda: activa</div>\n        </div>\n        <div id=\"chat-area\">\n            <div id=\"chat\">\n                <div class=\"msg system\">◈ AURA v3.5 — 5 motores activos — Búsqueda en tiempo real</div>\n            </div>\n            <div id=\"typing-indicator\">AURA procesando<span class=\"blink\">▋</span></div>\n            <div id=\"input-area\">\n                <div id=\"toolbar\">\n                    <span id=\"file-name\">Sin archivo adjunto</span>\n                    <button class=\"tool-btn\" id=\"clearFileBtn\" onclick=\"clearFile()\" style=\"display:none; color:#ff4444;\">✕ Quitar</button>\n                    <button class=\"tool-btn\" id=\"voiceBtn\" onclick=\"toggleVoice()\">🎤 VOZ</button>\n                </div>\n                <div id=\"input-row\">\n                    <input type=\"text\" id=\"msgInput\" placeholder=\"Escribe una orden...\" onkeypress=\"if(event.key===\'Enter\' && !event.shiftKey) send()\">\n                    <button id=\"sendBtn\" onclick=\"send()\">EJECUTAR</button>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <script>\n        const chat = document.getElementById(\'chat\');\n        const input = document.getElementById(\'msgInput\');\n        const status = document.getElementById(\'status\');\n        const typingEl = document.getElementById(\'typing-indicator\');\n        const sendBtn = document.getElementById(\'sendBtn\');\n        let fileContent = null, fileName = null, isListening = false, recognition = null;\n        let notificationsOn = false, newsInterval = null;\n        let isSending = false;\n\n        async function loadTicker() {\n            try {\n                const res = await fetch(\'/news\');\n                const data = await res.json();\n                if (data.news && data.news.length > 0) {\n                    document.getElementById(\'ticker-content\').textContent = data.news.join(\'  ◈  \');\n                    document.getElementById(\'mem-status\').textContent = \'Noticias: OK\';\n                    document.getElementById(\'mem-status\').style.color = \'#00aa2a\';\n                }\n            } catch(e) {}\n        }\n        loadTicker();\n        setInterval(loadTicker, 5 * 60 * 1000);\n\n        async function toggleNotifications() {\n            if (!notificationsOn) {\n                const perm = await Notification.requestPermission();\n                if (perm !== \'granted\') { addMsg(\'system\', \'Permiso denegado.\'); return; }\n                notificationsOn = true;\n                document.getElementById(\'notifBtn\').textContent = \'🔔 Alertas ON\';\n                document.getElementById(\'notifBtn\').classList.add(\'active\');\n                newsInterval = setInterval(async () => {\n                    try {\n                        const res = await fetch(\'/news\');\n                        const data = await res.json();\n                        if (data.news && data.news.length > 0) {\n                            new Notification(\'AURA\', { body: data.news[0].replace(/\\[.*?\\]/g,\'\').trim() });\n                        }\n                    } catch(e) {}\n                }, 10 * 60 * 1000);\n                addMsg(\'system\', \'Alertas activadas.\');\n            } else {\n                notificationsOn = false;\n                document.getElementById(\'notifBtn\').textContent = \'🔔 Alertas OFF\';\n                document.getElementById(\'notifBtn\').classList.remove(\'active\');\n                clearInterval(newsInterval);\n                addMsg(\'system\', \'Alertas desactivadas.\');\n            }\n        }\n\n        function handleFile() {\n            const file = document.getElementById(\'fileInput\').files[0];\n            if (!file) return;\n            const reader = new FileReader();\n            reader.onload = (e) => {\n                fileContent = e.target.result;\n                fileName = file.name;\n                document.getElementById(\'file-name\').textContent = \'📄 \' + fileName;\n                document.getElementById(\'clearFileBtn\').style.display = \'inline\';\n                addMsg(\'system\', \'Archivo cargado: \' + fileName);\n            };\n            reader.readAsText(file);\n        }\n\n        function clearFile() {\n            fileContent = null; fileName = null;\n            document.getElementById(\'file-name\').textContent = \'Sin archivo adjunto\';\n            document.getElementById(\'clearFileBtn\').style.display = \'none\';\n            document.getElementById(\'fileInput\').value = \'\';\n        }\n\n        function toggleVoice() {\n            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;\n            if (!SR) { alert(\'Usa Chrome para voz.\'); return; }\n            if (isListening) { recognition.stop(); return; }\n            recognition = new SR();\n            recognition.lang = \'es-ES\';\n            recognition.onstart = () => {\n                isListening = true;\n                document.getElementById(\'voiceBtn\').classList.add(\'active\');\n                document.getElementById(\'voiceBtn\').textContent = \'🔴 ESCUCHANDO\';\n                setStatus(\'ESCUCHANDO\', \'active\');\n            };\n            recognition.onresult = (e) => { input.value = e.results[0][0].transcript; send(); };\n            recognition.onend = () => {\n                isListening = false;\n                document.getElementById(\'voiceBtn\').classList.remove(\'active\');\n                document.getElementById(\'voiceBtn\').textContent = \'🎤 VOZ\';\n                setStatus(\'STANDBY\', \'\');\n            };\n            recognition.start();\n        }\n\n        function speak(text) {\n            if (!window.speechSynthesis) return;\n            window.speechSynthesis.cancel();\n            const utt = new SpeechSynthesisUtterance(text.replace(/[*#`\\[\]/g,\'\').substring(0,300));\n            utt.lang = \'es-ES\'; utt.rate = 1.1;\n            const voices = window.speechSynthesis.getVoices();\n            const v = voices.find(v => v.lang.startsWith(\'es\') && (v.name.includes(\'Paulina\')||v.name.includes(\'Monica\')||v.name.includes(\'Laura\')))\n                   || voices.find(v => v.lang.startsWith(\'es\'));\n            if (v) utt.voice = v;\n            utt.onstart = () => setStatus(\'HABLANDO\', \'speaking\');\n            utt.onend = () => setStatus(\'STANDBY\', \'\');\n            window.speechSynthesis.speak(utt);\n        }\n\n        function setStatus(text, cls) {\n            status.innerHTML = \'<span class=\"dot\"></span>\' + text;\n            status.className = cls;\n        }\n\n        function addMsg(type, text, meta={}) {\n            const div = document.createElement(\'div\');\n            div.className = \'msg \' + type;\n            if (type === \'system\') {\n                div.textContent = text;\n            } else {\n                let tags = \'\';\n                if (meta.web)  tags += \'<span class=\"tag web\">🌐 WEB</span>\';\n                if (meta.file) tags += \'<span class=\"tag file\">📄 ARCHIVO</span>\';\n                if (meta.mem)  tags += \'<span class=\"tag mem\">🧠 MEMORIA</span>\';\n                if (meta.game) tags += \'<span class=\"tag game\">🎮 JUEGO</span>\';\n                const label = type === \'aura\' ? \'AURA\' : \'RAIDEN\';\n                div.innerHTML = \'<div class=\"msg-header\">\' + label + tags + \'</div><div class=\"msg-body\">\' + text.replace(/\\n/g,\'<br>\') + \'</div>\';\n            }\n            chat.appendChild(div);\n            chat.scrollTop = chat.scrollHeight;\n            return div;\n        }\n\n        function clearChat() { chat.innerHTML = \'<div class=\"msg system\">◈ Chat limpiado.</div>\'; }\n\n        function quickCmd(cmd) {\n            input.value = cmd;\n            if (cmd.endsWith(\' \')) { input.focus(); } else { send(); }\n        }\n\n        async function send() {\n    if (isSending) return;\n    const val = input.value.trim();\n    if (!val) return;\n    \n    isSending = true;\n    input.value = \'\';\n    sendBtn.disabled = true;\n    sendBtn.textContent = \'...\';\n    \n    addMsg(\'user\', val + (fileName ? \' [📄 \' + fileName + \']\' : \'\'));\n    if (typingEl) typingEl.classList.add(\'show\');\n    chat.scrollTop = chat.scrollHeight;\n    setStatus(\'PROCESANDO\', \'active\');\n\n    try {\n        const res = await fetch(\'/chat\', {\n            method: \'POST\',\n            headers: { \'Content-Type\': \'application/json\' },\n            body: JSON.stringify({\n                messages: [{ role: \'user\', content: val }],\n                file_content: fileContent,\n                file_name: fileName\n            })\n        });\n        const data = await res.json();\n        if (typingEl) typingEl.classList.remove(\'show\');\n        addMsg(\'aura\', data.content, {\n            web: data.used_search, file: data.used_file,\n            mem: data.used_memory, game: data.used_game\n        });\n        speak(data.content);\n\n        // Ejecutar código si detecta comando\n        if (val.toLowerCase().includes(\'ejecuta\')) {\n            const codeMatch = val.match(/ejecuta.*?:\\s*([\\s\\S]+)/i);\n            if (codeMatch) {\n                const code = codeMatch[1].trim();\n                const execRes = await fetch(\'/execute\', {\n                    method: \'POST\',\n                    headers: {\'Content-Type\': \'application/json\'},\n                    body: JSON.stringify({code: code})\n                });\n                const execData = await execRes.json();\n                addMsg(\'system\', \'Resultado: \' + execData.result);\n            }\n        }\n    } catch(e) {\n        if (typingEl) typingEl.classList.remove(\'show\');\n        addMsg(\'system\', \'Error: \' + e.message);\n        console.error(\'Send error:\', e);\n    } finally {\n        isSending = false;\n        sendBtn.disabled = false;\n        sendBtn.textContent = \'EJECUTAR\';\n        setStatus(\'STANDBY\', \'\');\n    }\n}\n\n        async function loadMarkets() {\n            addMsg(\'system\', \'Cargando mercados...\');\n            try {\n                const res = await fetch(\'/markets\');\n                const data = await res.json();\n                addMsg(\'aura\', data.data);\n            } catch(e) {\n                addMsg(\'system\', \'Error cargando mercados.\');\n            }\n        }\n\n        window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();\n    </script>\n</body>\n</html>\n\"\"\"\n\n@app.get(\"/\", response_class=HTMLResponse)\nasync def root():\n    return HTML_CHAT\n\n@app.post(\"/chat\")\nasync def chat(request: Request):\n    try:\n        data = await request.json()\n        messages = data.get(\"messages\", [])\n        file_content = data.get(\"file_content\")\n        file_name = data.get(\"file_name\")\n        user_query = messages[-1][\'content\'] if messages else \"\"\n\n        used_search = used_file = used_memory = used_game = False\n\n        file_ctx = \"\"\n        if file_content:\n            used_file = True\n            file_ctx = f\"\\n[Archivo: {file_name}]:\\n{file_content[:5000]}\"\n\n        mem_ctx = \"\"\n        if vector_index:\n            try:\n                result = vector_index.query(data=user_query, top_k=1, include_metadata=True)\n                for item in result:\n                    mem_ctx = f\"\\n[Memoria]: {item.metadata.get(\'res\')}\"\n                    used_memory = True\n            except: pass\n\n        web_ctx = \"\"\n        keywords = [\n            \"busca:\", \"buscar\", \"qué es\", \"que es\", \"cómo\", \"como\",\n            \"precio\", \"noticia\", \"noticias\", \"hoy\", \"actual\", \"último\",\n            \"ultimo\", \"2024\", \"2025\", \"2026\", \"error\", \"solución\",\n            \"solucion\", \"tutorial\", \"github\", \"cuánto\", \"cuanto\",\n            \"quién\", \"quien\", \"dónde\", \"donde\", \"importante\",\n            \"reciente\", \"nuevo\", \"nueva\", \"mundial\", \"guerra\",\n            \"tecnología\", \"tecnologia\", \"nvidia\", \"gpu\", \"cpu\",\n            \"intel\", \"amd\", \"apple\", \"google\", \"microsoft\"\n        ]\n        if any(k in user_query.lower() for k in keywords):\n            web_ctx = smart_search(user_query.replace(\"busca:\", \"\").strip())\n            if web_ctx: used_search = True\n\n        game_ctx = \"\"\n        if any(k in user_query.lower() for k in [\"rollercoin\", \"juego\", \"jugar\", \"mining\"]):\n            used_game = True\n            game_ctx = \"\\n[JUEGO]: Módulo RollerCoin activo.\"\n            if redis_client:\n                try: redis_client.lpush(\"aura_tasks\", \"check_game\")\n                except: pass\n\n        messages.insert(0, {\n            \"role\": \"system\",\n            \"content\": personality.get_system_prompt(mem_ctx, file_ctx, web_ctx) + game_ctx\n        })\n\n        ans = call_llm(messages)\n\n        if vector_index and ans:\n            try:\n                vector_index.upsert(vectors=[(f\"msg_{os.urandom(2).hex()}\", user_query, {\"res\": ans})])\n            except: pass\n\n        return {\n            \"content\": ans,\n            \"used_search\": used_search, \"used_file\": used_file,\n            \"used_memory\": used_memory, \"used_game\": used_game\n        }\n\n    except Exception as e:\n        return JSONResponse(status_code=500, content={\n            \"content\": f\"Error: {str(e)}\",\n            \"used_search\": False, \"used_file\": False,\n            \"used_memory\": False, \"used_game\": False\n        })\n\n@app.post(\"/execute\")\nasync def execute(request: Request):\n    try:\n        data = await request.json()\n        code = data.get(\"code\", \"\")\n        language = data.get(\"language\", detect_language(code))\n        stdin = data.get(\"stdin\", \"\")\n\n        if not code:\n            return JSONResponse(status_code=400, content={\"error\": \"No hay código\"})\n\n        result = execute_code(code, language, stdin)\n        return {\"result\": format_result(result), \"raw\": result}\n    except Exception as e:\n        return JSONResponse(status_code=500, content={\"error\": str(e)})\n
+import os
+import requests
+import personality
+import httpx
+from search import smart_search
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from upstash_vector import Index
+from monitor import get_world_news, get_market_summary
+from models import call_llm, get_status
+from coder import execute_code, format_result, detect_language
+
+app = FastAPI()
+
+try:
+    vector_index = Index(
+        url=os.environ.get("UPSTASH_VECTOR_REST_URL"),
+        token=os.environ.get("UPSTASH_VECTOR_REST_TOKEN")
+    )
+except Exception:
+    vector_index = None
+
+try:
+    from upstash_redis import Redis
+    redis_client = Redis(
+        url=os.environ.get("UPSTASH_REDIS_REST_URL"),
+        token=os.environ.get("UPSTASH_REDIS_REST_TOKEN")
+    )
+except Exception:
+    redis_client = None
+
+@app.get("/news")
+async def get_news():
+    try:
+        from search import search_bbc, search_tech_news
+        news = search_bbc() + search_tech_news()
+        if not news:
+            return {"news": []}
+        lines = [l.strip() for l in news.strip().split("\n") if l.strip()]
+        return {"news": lines[:6]}
+    except Exception as e:
+        return {"news": [], "error": str(e)}
+
+@app.get("/markets")
+async def get_markets():
+    try:
+        return {"data": get_market_summary()}
+    except Exception as e:
+        return {"data": f"Error: {str(e)}"}
+
+@app.get("/worldnews")
+async def get_world_news_endpoint():
+    try:
+        news = get_world_news()
+        return {"news": news}
+    except Exception as e:
+        return {"news": [], "error": str(e)}
+
+@app.get("/debug")
+async def debug():
+    ngrok_url = os.environ.get("NGROK_URL", "")
+    ngrok_status = None
+    ngrok_response = None
+    ngrok_error = None
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(
+                ngrok_url,
+                json={
+                    "model": "dolphin-llama3:8b",
+                    "messages": [{"role": "user", "content": "di hola en español"}],
+                    "stream": False
+                },
+                headers={
+                    "User-Agent": "curl/7.68.0",
+                    "ngrok-skip-browser-warning": "true"
+                }
+            )
+            ngrok_status = r.status_code
+            ngrok_response = r.text[:200]
+    except Exception as e:
+        ngrok_error = str(e)
+    return {
+        "ngrok_url": ngrok_url,
+        "ngrok_status": ngrok_status,
+        "ngrok_response": ngrok_response,
+        "ngrok_error": ngrok_error
+    }
+
+HTML_CHAT = r"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AURA CORE</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --green: #00ff41;
+            --green-dim: #00aa2a;
+            --green-dark: #002200;
+            --bg: #0a0a0a;
+            --bg2: #0f0f0f;
+            --border: #1a1a1a;
+            --text-dim: #444;
+        }
+        body { background: var(--bg); color: var(--green); font-family: 'Courier New', monospace; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 8px 20px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+        #header .title { font-size: 13px; letter-spacing: 4px; color: var(--green); }
+        #status { font-size: 10px; color: var(--text-dim); letter-spacing: 2px; }
+        #status.active { color: var(--green); }
+        #status.speaking { color: #00aaff; }
+        .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim); margin-right: 5px; }
+        #status.active .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+        #status.speaking .dot { background: #00aaff; box-shadow: 0 0 6px #00aaff; }
+        #news-ticker { background: #050505; border-bottom: 1px solid var(--border); padding: 5px 20px; font-size: 10px; color: var(--text-dim); overflow: hidden; white-space: nowrap; flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
+        #news-ticker .label { color: var(--green-dim); flex-shrink: 0; letter-spacing: 2px; }
+        #ticker-content { display: inline-block; animation: ticker 40s linear infinite; }
+        @keyframes ticker { 0% { transform: translateX(100vw); } 100% { transform: translateX(-100%); } }
+        #main { display: flex; flex: 1; overflow: hidden; }
+        #sidebar { width: 200px; background: var(--bg2); border-right: 1px solid var(--border); padding: 15px 10px; display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; overflow-y: auto; }
+        .sidebar-title { font-size: 9px; color: var(--text-dim); letter-spacing: 2px; padding: 5px 8px; margin-top: 10px; }
+        .sidebar-btn { background: none; border: 1px solid var(--border); color: var(--text-dim); padding: 8px 10px; text-align: left; cursor: pointer; font-family: monospace; font-size: 11px; transition: all 0.2s; border-radius: 2px; width: 100%; }
+        .sidebar-btn:hover { border-color: var(--green-dim); color: var(--green); background: var(--green-dark); }
+        .sidebar-btn.active { border-color: var(--green); color: var(--green); background: var(--green-dark); }
+        #chat-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+        #chat::-webkit-scrollbar { width: 4px; }
+        #chat::-webkit-scrollbar-thumb { background: var(--border); }
+        .msg { max-width: 80%; padding: 12px 15px; border-radius: 2px; font-size: 12px; line-height: 1.6; border: 1px solid var(--border); animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; } }
+        .msg.user { align-self: flex-end; background: var(--green-dark); border-color: var(--green-dim); }
+        .msg.aura { align-self: flex-start; background: var(--bg2); }
+        .msg.aura:hover { border-color: var(--green-dim); }
+        .msg.system { align-self: center; background: none; font-size: 10px; color: var(--text-dim); max-width: 100%; text-align: center; padding: 5px 15px; }
+        .msg-header { font-size: 10px; color: var(--green-dim); margin-bottom: 6px; letter-spacing: 1px; display: flex; align-items: center; gap: 6px; }
+        .tag { font-size: 9px; padding: 1px 5px; border-radius: 2px; }
+        .tag.web  { background: #001133; color: #4488ff; border: 1px solid #003366; }
+        .tag.file { background: #1a0a00; color: #ff8844; border: 1px solid #663300; }
+        .tag.mem  { background: #0a0a1a; color: #8844ff; border: 1px solid #330066; }
+        .tag.game { background: #001a00; color: #00ff88; border: 1px solid #006633; }
+        .msg-body { white-space: pre-wrap; }
+        #typing-indicator { padding: 8px 20px; font-size: 10px; color: var(--text-dim); display: none; flex-shrink: 0; }
+        #typing-indicator.show { display: block; }
+        .blink { animation: blink 1s infinite; }
+        @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        #input-area { background: var(--bg2); border-top: 1px solid var(--border); padding: 12px 20px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; position: relative; z-index: 10; }
+        #toolbar { display: flex; gap: 8px; align-items: center; }
+        #file-name { font-size: 10px; color: var(--text-dim); flex: 1; }
+        .tool-btn { background: none; border: 1px solid var(--border); color: var(--text-dim); padding: 5px 10px; cursor: pointer; font-family: monospace; font-size: 10px; transition: all 0.2s; }
+        .tool-btn:hover { border-color: var(--green-dim); color: var(--green); }
+        .tool-btn.active { border-color: #ff4444; color: #ff4444; background: #110000; }
+        #input-row { display: flex; gap: 8px; }
+        #msgInput { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--green); padding: 10px 15px; outline: none; font-family: monospace; font-size: 12px; }
+        #msgInput:focus { border-color: var(--green-dim); }
+        #msgInput::placeholder { color: var(--text-dim); }
+        #sendBtn { background: var(--green); border: none; color: #000; padding: 10px 20px; cursor: pointer; font-family: monospace; font-weight: bold; font-size: 12px; }
+        #sendBtn:hover { background: #00cc33; }
+        #sendBtn:disabled { background: var(--green-dim); cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <div class="title">&#9672; AURA SYSTEM v3.5</div>
+        <div id="status"><span class="dot"></span>STANDBY</div>
+    </div>
+    <div id="news-ticker">
+        <span class="label">&#9672; LIVE</span>
+        <span id="ticker-content">Cargando noticias...</span>
+    </div>
+    <div id="main">
+        <div id="sidebar">
+            <div class="sidebar-title">&#9672; COMANDOS</div>
+            <button class="sidebar-btn" onclick="quickCmd('busca: noticias mundiales urgentes hoy')">Mundial</button>
+            <button class="sidebar-btn" onclick="loadMarkets()">Mercados</button>
+            <button class="sidebar-btn" onclick="quickCmd('busca: ultimas noticias tecnologia')">Tech</button>
+            <button class="sidebar-btn" onclick="quickCmd('busca: precio GPU Nvidia hoy')">Hardware</button>
+            <button class="sidebar-btn" onclick="quickCmd('que es ')">Wikipedia</button>
+            <button class="sidebar-btn" onclick="quickCmd('estado rollercoin')">RollerCoin</button>
+            <div class="sidebar-title">&#9672; SISTEMA</div>
+            <button class="sidebar-btn" id="notifBtn" onclick="toggleNotifications()">Alertas OFF</button>
+            <button class="sidebar-btn" onclick="clearChat()">Limpiar</button>
+            <button class="sidebar-btn" onclick="document.getElementById('fileInput').click()">Archivo</button>
+            <input type="file" id="fileInput" accept=".cpp,.c,.py,.txt,.js,.ts,.md,.json" style="display:none" onchange="handleFile()">
+            <div class="sidebar-title">&#9672; CODIGO</div>
+            <button class="sidebar-btn" onclick="quickCmd('ejecuta este codigo python: print(Hola AURA)')">Ejecutar Python</button>
+            <button class="sidebar-btn" onclick="quickCmd('ejecuta este codigo cpp: #include iostream')">Ejecutar C++</button>
+            <div class="sidebar-title">&#9672; ESTADO</div>
+            <div style="font-size:10px; color:#333; padding:5px 8px;" id="mem-status">Noticias: --</div>
+            <div style="font-size:10px; color:#00aa2a; padding:5px 8px;">Busqueda: activa</div>
+        </div>
+        <div id="chat-area">
+            <div id="chat">
+                <div class="msg system">&#9672; AURA v3.5 -- 5 motores activos -- Busqueda en tiempo real</div>
+            </div>
+            <div id="typing-indicator">AURA procesando<span class="blink">&#9611;</span></div>
+            <div id="input-area">
+                <div id="toolbar">
+                    <span id="file-name">Sin archivo adjunto</span>
+                    <button class="tool-btn" id="clearFileBtn" onclick="clearFile()" style="display:none; color:#ff4444;">X Quitar</button>
+                    <button class="tool-btn" id="voiceBtn" onclick="toggleVoice()">VOZ</button>
+                </div>
+                <div id="input-row">
+                    <input type="text" id="msgInput" placeholder="Escribe una orden..." onkeypress="if(event.key==='Enter' && !event.shiftKey) send()">
+                    <button id="sendBtn" onclick="send()">EJECUTAR</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const chat = document.getElementById('chat');
+        const input = document.getElementById('msgInput');
+        const status = document.getElementById('status');
+        const typingEl = document.getElementById('typing-indicator');
+        const sendBtn = document.getElementById('sendBtn');
+        let fileContent = null, fileName = null, isListening = false, recognition = null;
+        let notificationsOn = false, newsInterval = null;
+        let isSending = false;
+
+        async function loadTicker() {
+            try {
+                const res = await fetch('/news');
+                const data = await res.json();
+                if (data.news && data.news.length > 0) {
+                    document.getElementById('ticker-content').textContent = data.news.join('  --  ');
+                    document.getElementById('mem-status').textContent = 'Noticias: OK';
+                    document.getElementById('mem-status').style.color = '#00aa2a';
+                }
+            } catch(e) {}
+        }
+        loadTicker();
+        setInterval(loadTicker, 5 * 60 * 1000);
+
+        async function toggleNotifications() {
+            if (!notificationsOn) {
+                const perm = await Notification.requestPermission();
+                if (perm !== 'granted') { addMsg('system', 'Permiso denegado.'); return; }
+                notificationsOn = true;
+                document.getElementById('notifBtn').textContent = 'Alertas ON';
+                document.getElementById('notifBtn').classList.add('active');
+                newsInterval = setInterval(async () => {
+                    try {
+                        const res = await fetch('/news');
+                        const data = await res.json();
+                        if (data.news && data.news.length > 0) {
+                            new Notification('AURA', { body: data.news[0].trim() });
+                        }
+                    } catch(e) {}
+                }, 10 * 60 * 1000);
+                addMsg('system', 'Alertas activadas.');
+            } else {
+                notificationsOn = false;
+                document.getElementById('notifBtn').textContent = 'Alertas OFF';
+                document.getElementById('notifBtn').classList.remove('active');
+                clearInterval(newsInterval);
+                addMsg('system', 'Alertas desactivadas.');
+            }
+        }
+
+        function handleFile() {
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                fileContent = e.target.result;
+                fileName = file.name;
+                document.getElementById('file-name').textContent = fileName;
+                document.getElementById('clearFileBtn').style.display = 'inline';
+                addMsg('system', 'Archivo cargado: ' + fileName);
+            };
+            reader.readAsText(file);
+        }
+
+        function clearFile() {
+            fileContent = null; fileName = null;
+            document.getElementById('file-name').textContent = 'Sin archivo adjunto';
+            document.getElementById('clearFileBtn').style.display = 'none';
+            document.getElementById('fileInput').value = '';
+        }
+
+        function toggleVoice() {
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SR) { alert('Usa Chrome para voz.'); return; }
+            if (isListening) { recognition.stop(); return; }
+            recognition = new SR();
+            recognition.lang = 'es-ES';
+            recognition.onstart = () => {
+                isListening = true;
+                document.getElementById('voiceBtn').classList.add('active');
+                document.getElementById('voiceBtn').textContent = 'ESCUCHANDO';
+                setStatus('ESCUCHANDO', 'active');
+            };
+            recognition.onresult = (e) => { input.value = e.results[0][0].transcript; send(); };
+            recognition.onend = () => {
+                isListening = false;
+                document.getElementById('voiceBtn').classList.remove('active');
+                document.getElementById('voiceBtn').textContent = 'VOZ';
+                setStatus('STANDBY', '');
+            };
+            recognition.start();
+        }
+
+        function speak(text) {
+            if (!window.speechSynthesis) return;
+            window.speechSynthesis.cancel();
+            var clean = text.replace(/[*#`\[\]]/g, '').substring(0, 300);
+            const utt = new SpeechSynthesisUtterance(clean);
+            utt.lang = 'es-ES'; utt.rate = 1.1;
+            const voices = window.speechSynthesis.getVoices();
+            const v = voices.find(function(v) { return v.lang.startsWith('es') && (v.name.includes('Paulina') || v.name.includes('Monica') || v.name.includes('Laura')); })
+                   || voices.find(function(v) { return v.lang.startsWith('es'); });
+            if (v) utt.voice = v;
+            utt.onstart = () => setStatus('HABLANDO', 'speaking');
+            utt.onend = () => setStatus('STANDBY', '');
+            window.speechSynthesis.speak(utt);
+        }
+
+        function setStatus(text, cls) {
+            status.innerHTML = '<span class="dot"></span>' + text;
+            status.className = cls;
+        }
+
+        function addMsg(type, text, meta) {
+            meta = meta || {};
+            const div = document.createElement('div');
+            div.className = 'msg ' + type;
+            if (type === 'system') {
+                div.textContent = text;
+            } else {
+                var tags = '';
+                if (meta.web)  tags += '<span class="tag web">WEB</span>';
+                if (meta.file) tags += '<span class="tag file">ARCHIVO</span>';
+                if (meta.mem)  tags += '<span class="tag mem">MEMORIA</span>';
+                if (meta.game) tags += '<span class="tag game">JUEGO</span>';
+                const label = type === 'aura' ? 'AURA' : 'RAIDEN';
+                div.innerHTML = '<div class="msg-header">' + label + ' ' + tags + '</div><div class="msg-body">' + text.replace(/\n/g,'<br>') + '</div>';
+            }
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+            return div;
+        }
+
+        function clearChat() { chat.innerHTML = '<div class="msg system">Chat limpiado.</div>'; }
+
+        function quickCmd(cmd) {
+            input.value = cmd;
+            if (cmd.endsWith(' ')) { input.focus(); } else { send(); }
+        }
+
+        async function send() {
+            if (isSending) return;
+            const val = input.value.trim();
+            if (!val) return;
+            isSending = true;
+            input.value = '';
+            sendBtn.disabled = true;
+            sendBtn.textContent = '...';
+            addMsg('user', val + (fileName ? ' [' + fileName + ']' : ''));
+            if (typingEl) typingEl.classList.add('show');
+            chat.scrollTop = chat.scrollHeight;
+            setStatus('PROCESANDO', 'active');
+            try {
+                const res = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messages: [{ role: 'user', content: val }],
+                        file_content: fileContent,
+                        file_name: fileName
+                    })
+                });
+                const data = await res.json();
+                if (typingEl) typingEl.classList.remove('show');
+                addMsg('aura', data.content, {
+                    web: data.used_search, file: data.used_file,
+                    mem: data.used_memory, game: data.used_game
+                });
+                speak(data.content);
+            } catch(e) {
+                if (typingEl) typingEl.classList.remove('show');
+                addMsg('system', 'Error: ' + e.message);
+            } finally {
+                isSending = false;
+                sendBtn.disabled = false;
+                sendBtn.textContent = 'EJECUTAR';
+                setStatus('STANDBY', '');
+            }
+        }
+
+        async function loadMarkets() {
+            addMsg('system', 'Cargando mercados...');
+            try {
+                const res = await fetch('/markets');
+                const data = await res.json();
+                addMsg('aura', data.data);
+            } catch(e) {
+                addMsg('system', 'Error cargando mercados.');
+            }
+        }
+
+        window.speechSynthesis.onvoiceschanged = function() { window.speechSynthesis.getVoices(); };
+    </script>
+</body>
+</html>"""
+
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    return HTML_CHAT
+
+@app.post("/chat")
+async def chat(request: Request):
+    try:
+        data = await request.json()
+        messages = data.get("messages", [])
+        file_content = data.get("file_content")
+        file_name = data.get("file_name")
+        user_query = messages[-1]['content'] if messages else ""
+        used_search = used_file = used_memory = used_game = False
+        file_ctx = ""
+        if file_content:
+            used_file = True
+            file_ctx = f"\n[Archivo: {file_name}]:\n{file_content[:5000]}"
+        mem_ctx = ""
+        if vector_index:
+            try:
+                result = vector_index.query(data=user_query, top_k=1, include_metadata=True)
+                for item in result:
+                    mem_ctx = f"\n[Memoria]: {item.metadata.get('res')}"
+                    used_memory = True
+            except:
+                pass
+        web_ctx = ""
+        keywords = [
+            "busca:", "buscar", "que es", "como", "precio", "noticia",
+            "noticias", "hoy", "actual", "ultimo", "ultima", "2024",
+            "2025", "2026", "error", "solucion", "tutorial", "github",
+            "cuanto", "quien", "donde", "importante", "reciente",
+            "nuevo", "nueva", "mundial", "guerra", "tecnologia",
+            "nvidia", "gpu", "cpu", "intel", "amd", "apple",
+            "google", "microsoft"
+        ]
+        if any(k in user_query.lower() for k in keywords):
+            web_ctx = smart_search(user_query.replace("busca:", "").strip())
+            if web_ctx:
+                used_search = True
+        game_ctx = ""
+        if any(k in user_query.lower() for k in ["rollercoin", "juego", "jugar", "mining"]):
+            used_game = True
+            game_ctx = "\n[JUEGO]: Modulo RollerCoin activo."
+            if redis_client:
+                try:
+                    redis_client.lpush("aura_tasks", "check_game")
+                except:
+                    pass
+        messages.insert(0, {
+            "role": "system",
+            "content": personality.get_system_prompt(mem_ctx, file_ctx, web_ctx) + game_ctx
+        })
+        ans = call_llm(messages)
+        if vector_index and ans:
+            try:
+                vector_index.upsert(vectors=[(f"msg_{os.urandom(2).hex()}", user_query, {"res": ans})])
+            except:
+                pass
+        return {
+            "content": ans,
+            "used_search": used_search,
+            "used_file": used_file,
+            "used_memory": used_memory,
+            "used_game": used_game
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={
+            "content": f"Error: {str(e)}",
+            "used_search": False,
+            "used_file": False,
+            "used_memory": False,
+            "used_game": False
+        })
+
+@app.post("/execute")
+async def execute(request: Request):
+    try:
+        data = await request.json()
+        code = data.get("code", "")
+        language = data.get("language", detect_language(code))
+        stdin = data.get("stdin", "")
+        if not code:
+            return JSONResponse(status_code=400, content={"error": "No hay codigo"})
+        result = execute_code(code, language, stdin)
+        return {"result": format_result(result), "raw": result}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
