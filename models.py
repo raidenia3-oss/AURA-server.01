@@ -21,7 +21,7 @@ def try_ngrok(messages):
     for intento in range(2):  # Retry if content is empty
         try:
             res = requests.post(
-                NGROK_URL,
+                NGROK_URL + "/api/chat",
                 json={
                     "model": "dolphin-llama3:8b",
                     "messages": [{"role": "user", "content": prompt}],
