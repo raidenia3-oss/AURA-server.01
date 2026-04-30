@@ -60,9 +60,9 @@ def try_groq(messages):
         ans = res.json()
         if 'choices' in ans:
             return ans['choices'][0]['message']['content']
-    except:
-        pass
-    return None
+    except Exception as e:
+        print(f"GROQ error: {e}")
+        return None
 
 def try_openrouter(messages):
     if not OR_KEY:
@@ -82,7 +82,8 @@ def try_openrouter(messages):
             ans = res.json()
             if 'choices' in ans:
                 return ans['choices'][0]['message']['content']
-        except:
+        except Exception as e:
+            print(f"OpenRouter error: {e}")
             continue
     return None
 
@@ -109,9 +110,7 @@ def try_google(messages):
         )
         data = res.json()
         return data["candidates"][0]["content"]["parts"][0]["text"]
-    except:
-        pass
-    return None
+    except Exception as e:        print(f"Google error: {e}")        return None
 
 def get_status():
     GROQ_KEY = os.environ.get("GROQ_API_KEY")
@@ -132,3 +131,4 @@ def call_llm(messages: list) -> str:
     result = try_openrouter(messages)
     if result: return result
     return "[ERROR]: Todos los modelos fallaron."
+
