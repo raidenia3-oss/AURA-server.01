@@ -100,7 +100,7 @@ def try_google(messages):
             (m["content"] for m in messages if m["role"] == "system"), ""
         )
         res = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GOOGLE_KEY}",
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GOOGLE_KEY}",
             json={
                 "system_instruction": {"parts": [{"text": system_text}]},
                 "contents": google_messages
