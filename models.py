@@ -1,5 +1,6 @@
 import os
 import requests
+from router import call_ollama_smart
  
 OR_KEY = os.environ.get("OPENROUTER_API_KEY")
 NGROK_URL = os.environ.get("NGROK_URL")
@@ -11,6 +12,10 @@ OR_MODELS = [
 ]
  
 def try_ngrok(messages):
+    result, model = call_ollama_smart(messages)
+    if result:
+        print(f"[OLLAMA]: Respondió con {model}")
+        return result
     NGROK_URL = os.environ.get("NGROK_URL")
     if not NGROK_URL:
         return None
