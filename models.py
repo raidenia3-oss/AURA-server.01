@@ -51,7 +51,7 @@ def try_groq(messages):
         res = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {GROQ_KEY}"},
-            json={"model": "llama3-70b-8192", "messages": messages},
+            json={"model": "llama-3.3-70b-versatile", "messages": messages},
             timeout=15
         )
         print(f"[GROQ]: Status {res.status_code}")
