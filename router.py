@@ -4,7 +4,7 @@ import requests
 OLLAMA_BASE = "http://localhost:11434"
 
 # Modelo por defecto para cada conciencia futura
-DEFAULT_MODEL = "dolphin-llama3:8b"
+DEFAULT_MODEL = "gemma3:12b"
 
 # Palabras clave para detectar el tipo de tarea
 ROUTING_RULES = {
@@ -24,6 +24,12 @@ ROUTING_RULES = {
             "qué ves", "que ves", "mira esto", "screenshot", "captura"
         ]
     },
+    "fast_vision": {
+        "model": "moondream",
+        "keywords": [
+            "descripción rápida", "describe rápido", "imagen rápida", "foto rápida"
+        ]
+    },
     "reasoning": {
         "model": "deepseek-r1:8b",
         "keywords": [
@@ -31,6 +37,12 @@ ROUTING_RULES = {
             "cómo funciona", "como funciona", "deduce", "calcula", "matemática",
             "matematica", "lógica", "logica", "filosofía", "filosofia",
             "estrategia", "planifica", "decide", "compara", "evalúa", "evalua"
+        ]
+    },
+    "advanced": {
+        "model": "gemma3:12b",
+        "keywords": [
+            "avanzado", "complejo", "detallado", "profundo", "sofisticado"
         ]
     },
     "multilingual": {
