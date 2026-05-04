@@ -9,6 +9,10 @@ from upstash_vector import Index
 from monitor import get_world_news, get_market_summary
 from models import call_llm, get_status
 from coder import execute_code, format_result, detect_language
+from hacker import start_rollercoin_farmer, get_farmer_status
+
+# --- Configuración de ngrok para Hermes ---
+HERMES_NGROK_URL = os.environ.get("HERMES_NGROK_URL", "https://scabbed-uneven-habitant.ngrok-free.dev")
 
 app = FastAPI()
 
@@ -55,6 +59,14 @@ async def get_world_news_endpoint():
         return {"news": news}
     except Exception as e:
         return {"news": [], "error": str(e)}
+
+@app.post("/rollercoin/start")
+async def rollercoin_start():
+    return start_rollercoin_farmer()
+
+@app.get("/rollercoin/status")
+async def rollercoin_status():
+    return get_farmer_status()
 
 @app.get("/debug")
 async def debug():
