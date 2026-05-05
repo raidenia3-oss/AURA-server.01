@@ -1,113 +1,63 @@
-# hermes_server.py
-# Un pequeño servidor para exponer a Hermes Agent a través de una API local.
-# Ejecutar esto en WSL2/Ubuntu.
+﻿# hermes_server.py
+# Servidor Flask para exponer a Ollama local.
 
 from flask import Flask, request, jsonify
-import subprocess
+import requests
 import os
 import sys
 
-# Configuración de rutas - ajusta según tu instalación
-HERMES_PATH = os.environ.get("HERMES_PATH", "/home/raiden/.local/bin/hermes")
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
-
 app = Flask(__name__)
 
-def check_ollama():
-    """Verifica que Ollama esté corriendo y accesible."""
-    try:
-        import requests
-        response = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=5)
-        return response.status_code == 200
-    except:
-        return False
+# URL de tu servidor local de Ollama
+OLLAMA_API_URL = "http://127.0.0.1:11434/api/generate"
+
+# Modelo por defecto (debe estar instalado en Ollama)
+DEFAULT_MODEL = "dolphin-llama3:8b" 
 
 @app.route('/ask', methods=['POST'])
-def ask_hermes():
-    """Recibe una pregunta, la pasa a Hermes y devuelve la respuesta."""
-    data = request.json
-    prompt = data.get('prompt', '')
-
-    if not prompt:
-        return jsonify({"error": "No se proporcionó un prompt"}), 400
-
-    # Verificar que Ollama esté corriendo
-    if not check_ollama():
-        return jsonify({"error": "Ollama no está corriendo o no es accesible"}), 503
-
+def ask_ollama():
+    """Recibe una pregunta, la envía a Ollama y devuelve la respuesta."""
     try:
-        # Ejecuta Hermes como un proceso de línea de comandos
-        # Ajusta el comando según tu versión de Hermes
-        command = [HERMES_PATH, 'run', '--prompt', prompt, '--model', 'dolphin-llama3:8b']
+        data = request.json
+        prompt = data.get('prompt', '')
+        model = data.get('model', DEFAULT_MODEL) # Permite cambiar modelo desde la petición
 
-        # Si Hermes no está disponible, usar Ollama directamente como fallback
-        if not os.path.exists(HERMES_PATH):
-            app.logger.warning(f"Hermes no encontrado en {HERMES_PATH}, usando Ollama directamente")
-            import requests
-            ollama_response = requests.post(
-                f"{OLLAMA_HOST}/api/generate",
-                json={"model": "dolphin-llama3:8b", "prompt": prompt, "stream": False},
-                timeout=120
-            )
-            if ollama_response.status_code == 200:
-                result_data = ollama_response.json()
-                return jsonify({"response": result_data.get("response", "Sin respuesta")})
-            else:
-                return jsonify({"error": f"Error en Ollama: {ollama_response.text}"}), 500
+        if not prompt:
+            return jsonify({"response": "Error: No se proporcionó un prompt."}), 400
 
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            timeout=120,
-            cwd=os.path.dirname(HERMES_PATH) if os.path.exists(HERMES_PATH) else None
-        )
+        print(f"🔍 Hermes recibiendo: \'{prompt}\' (Modelo: {model})")
 
-        if result.returncode == 0:
-            response_text = result.stdout.strip()
-            if not response_text:
-                response_text = "Hermes respondió pero no hay texto (posible error)"
-            return jsonify({"response": response_text})
-        else:
-            error_text = result.stderr.strip()
-            app.logger.error(f"Error en Hermes: {error_text}")
-            return jsonify({"error": f"Error en Hermes: {error_text}"}), 500
+        # Prepara el payload para la API de Ollama
+        payload = {
+            "model": model,
+            "prompt": prompt,
+            "stream": False,  # No queremos streaming, queremos la respuesta completa
+            "options": {
+                "temperature": 0.7,
+                "num_predict": 256
+            }
+        }
+        
+        # Haz la petición POST a Ollama
+        response = requests.post(OLLAMA_API_URL, json=payload, timeout=120)
+        response.raise_for_status() # Lanza un error si la petición falla (ej: 404, 500)
+        
+        result = response.json()
+        response_text = result.get("response", "Respuesta vacía de Ollama.")
+        
+        print(f"✅ Hermes responded: {response_text[:50]}...")
+        return jsonify({"response": response_text})
 
-    except subprocess.TimeoutExpired:
-        return jsonify({"error": "Hermes tardó demasiado en responder"}), 504
-    except FileNotFoundError:
-        return jsonify({"error": f"Hermes no encontrado en {HERMES_PATH}"}), 500
+    except requests.exceptions.ConnectionError:
+        error_msg = "Error: No se pudo conectar a Ollama (11434). Asegúrate de que Ollama esté corriendo."
+        print(f"❌ {error_msg}")
+        return jsonify({"response": error_msg}), 500
     except Exception as e:
-        app.logger.error(f"Error inesperado: {str(e)}")
-        return jsonify({"error": f"Error interno: {str(e)}"}), 500
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    """Endpoint de verificación de salud."""
-    ollama_ok = check_ollama()
-    hermes_exists = os.path.exists(HERMES_PATH)
-
-    return jsonify({
-        "status": "healthy" if ollama_ok else "degraded",
-        "ollama": "running" if ollama_ok else "not running",
-        "hermes_path": HERMES_PATH,
-        "hermes_exists": hermes_exists,
-        "ollama_host": OLLAMA_HOST
-    })
+        error_msg = f"Error interno del servidor: {str(e)}"
+        print(f"❌ {error_msg}")
+        return jsonify({"response": error_msg}), 500
 
 if __name__ == '__main__':
-    print("🚀 Iniciando Hermes Server...")
-    print(f"📍 Hermes path: {HERMES_PATH}")
-    print(f"🔗 Ollama host: {OLLAMA_HOST}")
-    print(f"🌐 Puerto: 5000")
-
-    # Verificar estado inicial
-    ollama_ok = check_ollama()
-    hermes_exists = os.path.exists(HERMES_PATH)
-
-    print(f"📊 Ollama: {'✅ OK' if ollama_ok else '❌ No responde'}")
-    print(f"📊 Hermes: {'✅ Encontrado' if hermes_exists else '⚠️ No encontrado (usará Ollama directamente)'}")
-
-    # Ejecuta el servidor
-    app.run(host='0.0.0.0', port=5000, debug=True)
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    print("🚀 Iniciando servidor Hermes en puerto 5000...")
+    # Inicia el servidor en el puerto 5000, accesible desde la red local
+    app.run(host='0.0.0.0', port=5000, debug=False) # debug=False evita reinicios infinitos
