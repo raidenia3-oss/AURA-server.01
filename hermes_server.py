@@ -18,9 +18,25 @@ DEFAULT_MODEL = "dolphin-llama3:8b"
 def ask_ollama():
     """Recibe una pregunta, la envía a Ollama y devuelve la respuesta."""
     try:
-        data = request.json
+        data = request.get_json()
+        if not data:
+            # Si falla el parsing normal, intenta arreglar JSON malformado (problema con ngrok)
+            try:
+                raw_data = request.get_data()
+                json_str = raw_data.decode('utf-8')
+                # Convierte {prompt: Hola} a {"prompt": "Hola"}
+                import re
+                fixed_str = json_str.replace("'", '"')
+                fixed_str = re.sub(r'(\w+):', r'"\1":', fixed_str)
+                fixed_str = re.sub(r': (\w+)', r': "\1"', fixed_str)
+                fixed_str = re.sub(r': (\w+)([},])', r': "\1"\2', fixed_str)
+                import ast
+                data = ast.literal_eval(fixed_str)
+            except Exception as fix_error:
+                return jsonify({"response": f"Error: JSON inválido. Raw: {request.get_data()}"}), 400
+        
         prompt = data.get('prompt', '')
-        model = data.get('model', DEFAULT_MODEL) # Permite cambiar modelo desde la petición
+        model = data.get('model', DEFAULT_MODEL)
 
         if not prompt:
             return jsonify({"response": "Error: No se proporcionó un prompt."}), 400
@@ -31,7 +47,7 @@ def ask_ollama():
         payload = {
             "model": model,
             "prompt": prompt,
-            "stream": False,  # No queremos streaming, queremos la respuesta completa
+            "stream": False,
             "options": {
                 "temperature": 0.7,
                 "num_predict": 256
@@ -40,13 +56,17 @@ def ask_ollama():
         
         # Haz la petición POST a Ollama
         response = requests.post(OLLAMA_API_URL, json=payload, timeout=120)
-        response.raise_for_status() # Lanza un error si la petición falla (ej: 404, 500)
+        response.raise_for_status()
         
         result = response.json()
         response_text = result.get("response", "Respuesta vacía de Ollama.")
         
         print(f"✅ Hermes responded: {response_text[:50]}...")
         return jsonify({"response": response_text})
+    
+    except Exception as e:
+        print(f"❌ Error en ask_ollama: {e}")
+        return jsonify({"response": f"Error interno del servidor: {str(e)}"}), 500
 
     except requests.exceptions.ConnectionError:
         error_msg = "Error: No se pudo conectar a Ollama (11434). Asegúrate de que Ollama esté corriendo."
