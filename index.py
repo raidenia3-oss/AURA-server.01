@@ -525,78 +525,82 @@ async def execute(request: Request):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 # --- INICIO DEL BOT DE DISCORD ---
-import discord
-from discord.ext import commands
-import os
-import requests
-import threading
-import sys
-
-# Solo importar asyncio si es necesario (evita conflictos)
 try:
-    import asyncio
-except ImportError:
-    pass
+    import discord
+    from discord.ext import commands
+    import threading
+    import sys
 
-# Verificamos si el token existe antes de intentar iniciar
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+    # Solo importar asyncio si es necesario (evita conflictos)
+    try:
+        import asyncio
+    except ImportError:
+        pass
 
-if DISCORD_TOKEN and len(DISCORD_TOKEN) > 10:
-    # Configuración de Intents (necesario para leer mensajes)
-    intents = discord.Intents.default()
-    intents.message_content = True
-    
-    # Creamos el bot
-    # Nota: Usamos `None` para `command_prefix` si no lo necesitas, pero "!" es estándar.
-    bot = commands.Bot(command_prefix="!", intents=intents)
+    # Verificamos si el token existe antes de intentar iniciar
+    DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
-    @bot.event
-    async def on_ready():
-        print(f"✅ AURA Bot conectado a Discord como {bot.user}")
-        # Opcional: Registrar comandos slash si los necesitas
-
-    @bot.command(name="hablar", description="Preguntar a AURA usando tu cerebro local")
-    async def preguntar(ctx, *, pregunta: str):
-        """Comando para preguntar a AURA"""
-        # Muestra un mensaje de "pensando" para mejor UX
-        thinking_msg = await ctx.send(f"🤔 *Pensando en: {pregunta[:50]}...*", delete_after=5)
+    if DISCORD_TOKEN and len(DISCORD_TOKEN) > 10:
+        # Configuración de Intents (necesario para leer mensajes)
+        intents = discord.Intents.default()
+        intents.message_content = True
         
-        try:
-            # 1. Conectar con tu cerebro local vía ngrok
-            ngrok_url = os.getenv("HERMES_NGROK_URL")
-            if not ngrok_url:
-                await thinking_msg.edit(content="❌ Error: Variable HERMES_NGROK_URL no configurada.")
-                return
+        # Creamos el bot
+        # Nota: Usamos `None` para `command_prefix` si no lo necesitas, pero "!" es estándar.
+        bot = commands.Bot(command_prefix="!", intents=intents)
 
-            response = requests.post(
-                f"{ngrok_url}/ask", 
-                json={"prompt": pregunta}, 
-                timeout=120
-            )
+        @bot.event
+        async def on_ready():
+            print(f"✅ AURA Bot conectado a Discord como {bot.user}")
+            # Opcional: Registrar comandos slash si los necesitas
+
+        @bot.command(name="hablar", description="Preguntar a AURA usando tu cerebro local")
+        async def preguntar(ctx, *, pregunta: str):
+            """Comando para preguntar a AURA"""
+            # Muestra un mensaje de "pensando" para mejor UX
+            thinking_msg = await ctx.send(f"🤔 *Pensando en: {pregunta[:50]}...*", delete_after=5)
             
-            if response.status_code == 200:
-                respuesta_hermes = response.json().get("response", "Sin respuesta de Hermes.")
-                await thinking_msg.edit(content=f"💬 **AURA responde:**\n{respuesta_hermes}")
-            else:
-                await thinking_msg.edit(content=f"❌ Error HTTP: {response.status_code}. Asegúrate de que `hermes_server.py` esté corriendo y ngrok apunte a 5000.")
+            try:
+                # 1. Conectar con tu cerebro local vía ngrok
+                ngrok_url = os.getenv("HERMES_NGROK_URL")
+                if not ngrok_url:
+                    await thinking_msg.edit(content="❌ Error: Variable HERMES_NGROK_URL no configurada.")
+                    return
+
+                response = requests.post(
+                    f"{ngrok_url}/ask", 
+                    json={"prompt": pregunta}, 
+                    timeout=120
+                )
                 
-        except requests.exceptions.Timeout:
-            await thinking_msg.edit(content="⏱️ Tiempo de espera agotado. El modelo local tardó mucho.")
-        except requests.exceptions.ConnectionError:
-            await thinking_msg.edit(content="🔌 No se pudo conectar con ngrok. Verifica que ngrok esté activo y apunte al puerto 5000.")
-        except Exception as e:
-            await thinking_msg.edit(content=f"❌ Error inesperado: {str(e)}")
+                if response.status_code == 200:
+                    respuesta_hermes = response.json().get("response", "Sin respuesta de Hermes.")
+                    await thinking_msg.edit(content=f"💬 **AURA responde:**\n{respuesta_hermes}")
+                else:
+                    await thinking_msg.edit(content=f"❌ Error HTTP: {response.status_code}. Asegúrate de que `hermes_server.py` esté corriendo y ngrok apunte a 5000.")
+                    
+            except requests.exceptions.Timeout:
+                await thinking_msg.edit(content="⏱️ Tiempo de espera agotado. El modelo local tardó mucho.")
+            except requests.exceptions.ConnectionError:
+                await thinking_msg.edit(content="🔌 No se pudo conectar con ngrok. Verifica que ngrok esté activo y apunte al puerto 5000.")
+            except Exception as e:
+                await thinking_msg.edit(content=f"❌ Error inesperado: {str(e)}")
 
-    def iniciar_discord():
-        """Función para iniciar el bot en un hilo separado"""
-        try:
-            print("🚀 Iniciando hilo de Discord...")
-            bot.run(DISCORD_TOKEN)
-        except Exception as e:
-            print(f"❌ Error iniciando el bot de Discord: {e}")
+        def iniciar_discord():
+            """Función para iniciar el bot en un hilo separado"""
+            try:
+                print("🚀 Iniciando hilo de Discord...")
+                bot.run(DISCORD_TOKEN)
+            except Exception as e:
+                print(f"❌ Error iniciando el bot de Discord: {e}")
 
-    # Iniciar el bot en un hilo separado para que no bloquee FastAPI
-    threading.Thread(target=iniciar_discord, daemon=True).start()
-    print("✅ Bot de Discord iniciado en hilo separado.")
-else:
-    print("⚠️ Aviso: DISCORD_TOKEN no encontrado o inválido. El bot no se iniciará.")
+        # Iniciar el bot en un hilo separado para que no bloquee FastAPI
+        threading.Thread(target=iniciar_discord, daemon=True).start()
+        print("✅ Bot de Discord iniciado en hilo separado.")
+    else:
+        print("⚠️ Aviso: DISCORD_TOKEN no encontrado o inválido. El bot no se iniciará.")
+
+except ImportError as e:
+    print(f"⚠️ Discord.py no disponible: {e}. El bot no se iniciará.")
+except Exception as e:
+    print(f"⚠️ Error al inicializar bot de Discord: {e}. Continuando sin bot.")
