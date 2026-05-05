@@ -99,6 +99,42 @@ async def debug():
         "ngrok_error": ngrok_error
     }
 
+@app.get("/test-hermes")
+async def test_hermes():
+    """Endpoint de prueba para verificar la conexión con Hermes a través de ngrok."""
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                HERMES_NGROK_URL + "/ask",
+                json={"prompt": "Di 'Hola desde AURA' en español"},
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "curl/7.68.0",
+                    "ngrok-skip-browser-warning": "true"
+                }
+            )
+            if r.status_code == 200:
+                data = r.json()
+                return {
+                    "status": "success",
+                    "hermes_url": HERMES_NGROK_URL,
+                    "response": data.get("response", "No response field"),
+                    "full_response": data
+                }
+            else:
+                return {
+                    "status": "error",
+                    "hermes_url": HERMES_NGROK_URL,
+                    "status_code": r.status_code,
+                    "response": r.text[:500]
+                }
+    except Exception as e:
+        return {
+            "status": "exception",
+            "hermes_url": HERMES_NGROK_URL,
+            "error": str(e)
+        }
+
 HTML_CHAT = r"""<!DOCTYPE html>
 <html>
 <head>
