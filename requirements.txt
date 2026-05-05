@@ -1,6 +1,8 @@
 fastapi
 uvicorn
+flask
 requests
+discord.py
 upstash-vector
 upstash-redis
 ddgs
