@@ -79,6 +79,59 @@ try:
 except Exception:
     redis_client = None
 
+MEMORY_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "AURA-Brain", "Memorias"))
+MAX_MEMORY_CHARS = 7000
+
+
+def load_obsidian_memory():
+    memory_files = []
+    if not os.path.isdir(MEMORY_FOLDER):
+        return {"memory_files": [], "context": ""}
+
+    for root, _, files in os.walk(MEMORY_FOLDER):
+        for filename in sorted(files):
+            if filename.lower().endswith(".md"):
+                path = os.path.join(root, filename)
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        content = f.read().strip()
+                except Exception:
+                    continue
+                if not content:
+                    continue
+                relname = os.path.relpath(path, MEMORY_FOLDER).replace("\\", "/")
+                memory_files.append({"file_name": relname, "content": content})
+
+    context_parts = []
+    total_chars = 0
+    for entry in memory_files:
+        prefix = f"[Memoria Obsidian: {entry['file_name']}]:\n"
+        snippet = entry["content"][:2000]
+        block = prefix + snippet
+        if total_chars + len(block) > MAX_MEMORY_CHARS:
+            remaining = MAX_MEMORY_CHARS - total_chars - len(prefix)
+            if remaining > 0:
+                block = prefix + snippet[:remaining]
+            else:
+                break
+        context_parts.append(block)
+        total_chars += len(block)
+
+    return {"memory_files": memory_files, "context": "\n\n".join(context_parts)}
+
+
+@app.get("/memory")
+async def memory():
+    memory_data = load_obsidian_memory()
+    return {
+        "memory_path": MEMORY_FOLDER,
+        "memory": memory_data["context"],
+        "files": [
+            {"file_name": item["file_name"], "content": item["content"]}
+            for item in memory_data["memory_files"]
+        ]
+    }
+
 @app.get("/news")
 async def get_news():
     try:
@@ -507,6 +560,14 @@ async def chat(request: Request):
                     used_memory = True
             except:
                 pass
+
+        obsidian_data = load_obsidian_memory()
+        if obsidian_data["context"]:
+            used_memory = True
+            if mem_ctx:
+                mem_ctx += "\n\n" + obsidian_data["context"]
+            else:
+                mem_ctx = obsidian_data["context"]
         web_ctx = ""
         keywords = [
             "busca:", "buscar", "que es", "como", "precio", "noticia",
