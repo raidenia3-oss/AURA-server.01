@@ -6,8 +6,10 @@ OR_KEY = os.environ.get("OPENROUTER_API_KEY")
 NGROK_URL = os.environ.get("NGROK_URL")
  
 OR_MODELS = [
+    "meta-llama/llama-3.3-70b-instruct:free",
     "google/gemini-flash-1.5:free",
     "mistralai/mistral-7b-instruct:free",
+    "openai/gpt-3.5-turbo",
     "openrouter/cinematika-7b:free",
 ]
  
