@@ -2,6 +2,7 @@ import os
 import requests
 import personality
 import httpx
+import threading
 from search import smart_search
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -79,28 +80,60 @@ try:
 except Exception:
     redis_client = None
 
-MEMORY_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "AURA-Brain", "Memorias"))
+GITHUB_OWNER = "raidenia3-oss"
+GITHUB_REPO = "AURA-server.01"
+GITHUB_BRANCH = "main"
+GITHUB_MEMORY_PATH = "AURA-Brain/Memorias"
+GITHUB_RAW_BASE = f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}"
 MAX_MEMORY_CHARS = 7000
+
+
+def github_api_headers():
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AURA-Agent"
+    }
+    github_token = os.environ.get("GITHUB_TOKEN")
+    if github_token:
+        headers["Authorization"] = f"token {github_token}"
+    return headers
+
+
+def list_github_memory_files():
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/git/trees/{GITHUB_BRANCH}?recursive=1"
+        response = requests.get(url, headers=github_api_headers(), timeout=20)
+        response.raise_for_status()
+        data = response.json()
+        tree = data.get("tree", [])
+        paths = [item["path"] for item in tree
+                 if item.get("type") == "blob"
+                 and item.get("path", "").startswith(GITHUB_MEMORY_PATH + "/")
+                 and item.get("path", "").lower().endswith(".md")]
+        return sorted(paths)
+    except Exception:
+        return []
+
+
+def fetch_github_raw_file(path):
+    try:
+        raw_url = f"{GITHUB_RAW_BASE}/{GITHUB_BRANCH}/{path}"
+        response = requests.get(raw_url, headers=github_api_headers(), timeout=20)
+        if response.status_code == 200:
+            return response.text
+    except Exception:
+        pass
+    return None
 
 
 def load_obsidian_memory():
     memory_files = []
-    if not os.path.isdir(MEMORY_FOLDER):
-        return {"memory_files": [], "context": ""}
-
-    for root, _, files in os.walk(MEMORY_FOLDER):
-        for filename in sorted(files):
-            if filename.lower().endswith(".md"):
-                path = os.path.join(root, filename)
-                try:
-                    with open(path, "r", encoding="utf-8") as f:
-                        content = f.read().strip()
-                except Exception:
-                    continue
-                if not content:
-                    continue
-                relname = os.path.relpath(path, MEMORY_FOLDER).replace("\\", "/")
-                memory_files.append({"file_name": relname, "content": content})
+    for path in list_github_memory_files():
+        content = fetch_github_raw_file(path)
+        if not content:
+            continue
+        relname = path[len(GITHUB_MEMORY_PATH) + 1:]
+        memory_files.append({"file_name": relname, "content": content.strip()})
 
     context_parts = []
     total_chars = 0
@@ -124,7 +157,7 @@ def load_obsidian_memory():
 async def memory():
     memory_data = load_obsidian_memory()
     return {
-        "memory_path": MEMORY_FOLDER,
+        "memory_source": f"{GITHUB_RAW_BASE}/{GITHUB_BRANCH}/{GITHUB_MEMORY_PATH}",
         "memory": memory_data["context"],
         "files": [
             {"file_name": item["file_name"], "content": item["content"]}
