@@ -83,7 +83,7 @@ except Exception:
 GITHUB_OWNER = "raidenia3-oss"
 GITHUB_REPO = "AURA-server.01"
 GITHUB_BRANCH = "main"
-GITHUB_MEMORY_PATH = "AURA-Brain/Memorias"
+GITHUB_MEMORY_PATH = "AURA-Brain/AURA-Brain/Memorias"
 GITHUB_RAW_BASE = f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}"
 MAX_MEMORY_CHARS = 7000
 
