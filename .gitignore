@@ -1,4 +1,77 @@
-.env
+# ── Python ──
 __pycache__/
-*.pyc
-.vercel
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.Python
+
+# ── Virtual environments ──
+venv/
+env/
+.env
+.venv/
+AURA_Core/venv/
+otro_proyecto/bin/
+otro_proyecto/lib/
+otro_proyecto/include/
+otro_proyecto/pyvenv.cfg
+
+# ── Node / NPM ──
+node_modules/
+package-lock.json
+
+# ── IDE / Editor ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Logs ──
+*.log
+log_*.txt
+AURA_Core/aura_respuestas.txt
+AURA_Core/aura_notas.txt
+
+# ── OSINT cache / downloads ──
+AME_Core/downloads_sync/
+!AME_Core/downloads_sync/.gitkeep
+
+# ── Large blobs / binaries ──
+blobs/
+*.pyd
+*.so
+*.dll
+*.exe
+*.bin
+*.pkl
+
+# ── Cookies / tokens / secrets ──
+cookies.json
+*.token
+*.key
+*.pem
+credentials.json
+*.cred
+
+# ── Ngrok / tunnels ──
+ngrok.yml
+*.ngrok*
+
+# ── Discord service ──
+discord_service/venv/
+
+# ── Hermes / Railway ──
+railway.json
+vercel.json
+
+# ── System ──
+*.bat
+*.vbs
+!Setup/*.bat
+!Setup/*.vbs

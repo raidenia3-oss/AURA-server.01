@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AURA · Dashboard</title>
+    <!-- React Flow UMD - todo local/lightweight -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@reactflow/core@11.10.1/dist/umd/index.js"></script>
+    <script src="https://unpkg.com/@reactflow/background@11.10.1/dist/umd/index.js"></script>
+    <script src="https://unpkg.com/@reactflow/controls@11.10.1/dist/umd/index.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #0b1120;
+            --card: #131c31;
+            --border: #1e2d45;
+            --text: #e2e8f0;
+            --text-dim: #64748b;
+            --green: #deff9a;
+            --red: #ef4444;
+            --blue: #3b82f6;
+            --accent: #8b5cf6;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+            min-height: 100vh;
+            font-size: 14px;
+        }
+
+        .app {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* ----- SIDEBAR ----- */
+        .sidebar {
+            width: 220px;
+            background: #060d18;
+            border-right: 1px solid var(--border);
+            padding: 1.5rem 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: var(--accent);
+            letter-spacing: 1px;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .logo span { color: var(--text); font-weight: 300; }
+
+        .nav-item {
+            padding: 0.6rem 0.8rem;
+            border-radius: 6px;
+            color: var(--text-dim);
+            cursor: pointer;
+            transition: 0.15s;
+            font-size: 0.85rem;
+        }
+        .nav-item:hover { background: var(--card); color: var(--text); }
+        .nav-item.active { background: var(--blue); color: #fff; }
+
+        /* ----- MAIN ----- */
+        .main {
+            flex: 1;
+            padding: 1.5rem 2rem;
+            max-width: 1300px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+        .topbar h1 { font-size: 1.3rem; font-weight: 600; }
+
+        .health-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            background: var(--card);
+            padding: 0.4rem 1rem;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            font-size: 0.8rem;
+        }
+        .health-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .health-dot.ok  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+        .health-dot.bad { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+
+        /* ----- STATS ROW ----- */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px,1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .stat-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem 1.2rem;
+        }
+        .stat-card .label { color: var(--text-dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-card .value { font-size: 1.4rem; font-weight: 700; margin-top: 4px; }
+        .stat-card .sub   { font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; }
+
+        .stat-card.online .value { color: var(--green); }
+        .stat-card.offline .value { color: var(--red); }
+
+        /* ----- FLOW CANVAS ----- */
+        .flow-section {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .flow-section .section-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-dim);
+            margin-bottom: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        #flow-root {
+            height: 420px;
+            width: 100%;
+            background: #050b15;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        /* ----- OSINT PANEL ----- */
+        .osint-panel {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem 1.2rem;
+        }
+        .osint-panel .section-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.8rem;
+        }
+        .osint-row {
+            display: flex;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .osint-row input {
+            flex: 1;
+            min-width: 200px;
+            background: #050b15;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.5rem 0.8rem;
+            color: var(--text);
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+        .osint-row select {
+            background: #050b15;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.5rem 0.8rem;
+            color: var(--text);
+            font-size: 0.85rem;
+        }
+        .btn {
+            padding: 0.5rem 1.2rem;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: 0.15s;
+        }
+        .btn:hover { filter: brightness(1.15); }
+        .btn-primary { background: var(--blue); color: #fff; }
+        .btn-danger  { background: var(--red);  color: #fff; }
+        .btn-accent  { background: var(--accent); color: #fff; }
+
+        .osint-result {
+            margin-top: 0.8rem;
+            background: #050b15;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.8rem;
+            font-family: monospace;
+            font-size: 0.8rem;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            color: var(--text-dim);
+        }
+
+        /* ----- RESPONSIVE ----- */
+        @media (max-width: 700px) {
+            .sidebar { display: none; }
+            .main { padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <!-- SIDEBAR -->
+    <nav class="sidebar">
+        <div class="logo">◈ AURA <span>v2</span></div>
+        <div class="nav-item active">📊 Dashboard</div>
+        <div class="nav-item">🤖 Bots</div>
+        <div class="nav-item">🔍 OSINT</div>
+        <div class="nav-item">⚙️ Settings</div>
+        <div style="flex:1"></div>
+        <div class="nav-item" style="color:var(--text-dim);font-size:0.75rem;">
+            LG Q60 · LAN
+        </div>
+    </nav>
+
+    <!-- MAIN -->
+    <main class="main">
+        <!-- Top bar -->
+        <div class="topbar">
+            <h1>◈ Command Center</h1>
+            <div class="health-badge" id="healthBadge">
+                <span class="health-dot" id="healthDot"></span>
+                <span id="healthLabel">Checking…</span>
+                <span style="color:var(--text-dim);margin-left:4px;" id="healthRam"></span>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats" id="statsGrid">
+            <div class="stat-card online">
+                <div class="label">AURA MASTER</div>
+                <div class="value" id="statMaster">● ONLINE</div>
+                <div class="sub">Core controller</div>
+            </div>
+            <div class="stat-card" id="statBotsCard">
+                <div class="label">Active Bots</div>
+                <div class="value" id="statBotsCount">0</div>
+                <div class="sub">of <span id="statBotsTotal">0</span> registered</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">RAM Free</div>
+                <div class="value" id="statRam">—</div>
+                <div class="sub">on PC server</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Uptime</div>
+                <div class="value" id="statUptime">—</div>
+                <div class="sub">since last restart</div>
+            </div>
+        </div>
+
+        <!-- React Flow Canvas -->
+        <div class="flow-section">
+            <div class="section-title">◈ Bot Topology (live)</div>
+            <div id="flow-root"></div>
+            <div style="margin-top:0.5rem;font-size:0.7rem;color:var(--text-dim);text-align:center;">
+                Click a node to toggle service · polling every 5s
+            </div>
+        </div>
+
+        <!-- OSINT Panel -->
+        <div class="osint-panel">
+            <div class="section-title">🔍 OSINT Recon (PhoneInfoga / Mr. Holmes)</div>
+            <div class="osint-row">
+                <select id="osintTool">
+                    <option value="phone">📞 PhoneInfoga</option>
+                    <option value="email">✉️ Mr. Holmes</option>
+                </select>
+                <input type="text" id="osintTarget" placeholder="Target… e.g. +34123456789 or email@example.com" />
+                <button class="btn btn-accent" id="osintRunBtn">▶ Scan</button>
+                <button class="btn btn-danger" id="osintClearBtn">✕ Clear</button>
+            </div>
+            <div class="osint-result" id="osintResult">⏎ results will appear here…</div>
+        </div>
+    </main>
+</div>
+
+<!-- ===== VANILLA JS: polling & OSINT ===== -->
+<script>
+(function() {
+    const API_BASE = '';
+
+    // --- DOM refs ---
+    const healthDot    = document.getElementById('healthDot');
+    const healthLabel  = document.getElementById('healthLabel');
+    const healthRam    = document.getElementById('healthRam');
+    const statMaster   = document.getElementById('statMaster');
+    const statBotsCount= document.getElementById('statBotsCount');
+    const statBotsTotal= document.getElementById('statBotsTotal');
+    const statRam      = document.getElementById('statRam');
+    const statUptime   = document.getElementById('statUptime');
+    const statBotsCard = document.getElementById('statBotsCard');
+    const osintResult  = document.getElementById('osintResult');
+    const osintTool    = document.getElementById('osintTool');
+    const osintTarget  = document.getElementById('osintTarget');
+    const osintRunBtn  = document.getElementById('osintRunBtn');
+    const osintClearBtn= document.getElementById('osintClearBtn');
+
+    let lastStatus = {};
+
+    // --- Poll /api/status every 5s ---
+    async function pollStatus() {
+        try {
+            const res = await fetch(API_BASE + '/api/status');
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const st = await res.json();
+            lastStatus = st;
+            renderStatus(st);
+        } catch(e) {
+            healthDot.className = 'health-dot bad';
+            healthLabel.textContent = 'Disconnected';
+            healthRam.textContent = '';
+            statMaster.textContent = '● OFFLINE';
+            statMaster.style.color = 'var(--red)';
+        }
+    }
+
+    function renderStatus(st) {
+        // --- Health badge ---
+        const overall = st.system_health === 'healthy';
+        healthDot.className = overall ? 'health-dot ok' : 'health-dot bad';
+        healthLabel.textContent = overall ? 'System OK' : 'Degraded';
+        healthRam.textContent = st.ram_free_gb ? `· ${st.ram_free_gb} GB free` : '';
+
+        // --- Stats ---
+        statMaster.textContent = '● ' + (st.master_online ? 'ONLINE' : 'OFFLINE');
+        statMaster.style.color = st.master_online ? 'var(--green)' : 'var(--red)';
+
+        const bots = st.bots || {};
+        const botKeys = Object.keys(bots);
+        const onlineBots = botKeys.filter(k => bots[k] === true || bots[k] === 'ONLINE' || bots[k] === 'online');
+        statBotsCount.textContent = onlineBots.length;
+        statBotsTotal.textContent = botKeys.length;
+
+        statRam.textContent = st.ram_free_gb ? st.ram_free_gb + ' GB' : '—';
+        statUptime.textContent = st.uptime || '—';
+    }
+
+    // --- OSINT execute ---
+    async function runOsint() {
+        const tool   = osintTool.value;   // 'phone' | 'email'
+        const target = osintTarget.value.trim();
+        if (!target) { osintResult.textContent = '⚠️ Please enter a target.'; return; }
+
+        osintResult.textContent = '⏳ Scanning…';
+        osintRunBtn.disabled = true;
+        try {
+            const res = await fetch(API_BASE + '/api/osint', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tool, target })
+            });
+            const data = await res.json();
+            osintResult.textContent = JSON.stringify(data, null, 2);
+        } catch(e) {
+            osintResult.textContent = '❌ Error: ' + e.message;
+        } finally {
+            osintRunBtn.disabled = false;
+        }
+    }
+
+    osintRunBtn.addEventListener('click', runOsint);
+    osintClearBtn.addEventListener('click', () => {
+        osintResult.textContent = '⏎ results will appear here…';
+        osintTarget.value = '';
+    });
+    osintTarget.addEventListener('keydown', e => { if (e.key === 'Enter') runOsint(); });
+
+    // --- Start polling ---
+    pollStatus();
+    setInterval(pollStatus, 5000);
+})();
+</script>
+
+<!-- ===== REACT FLOW (Babel) ===== -->
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+const ReactFlow   = window.ReactFlow.default;
+const Background  = window.ReactFlowBackground.default;
+const Controls    = window.ReactFlowControls.default;
+
+/* ---- Bot definitions (dynamic from /api/status) ---- */
+const STATIC_BOTS = {
+    'aura_master': { id: 'm1', label: '◈ AURA_MASTER', x: 300, y: 0, isMaster: true },
+    'crypto_farmer': { id: 'b1', label: '⛏️ crypto_farmer', x: 100, y: 180 },
+    'discord_bot':   { id: 'b2', label: '💬 discord_bot',   x: 300, y: 180 },
+    'escudo_monitor':{ id: 'b3', label: '🛡️ escudo_monitor',x: 500, y: 180 },
+    'recon_agent':   { id: 'b4', label: '🔍 recon_agent',   x: 200, y: 320 },
+    'osint_engine':  { id: 'b5', label: '🧪 osint_engine',  x: 400, y: 320 },
+};
+
+/* Build edges: all children point to master */
+function buildEdges() {
+    const e = [];
+    Object.values(STATIC_BOTS).forEach(bot => {
+        if (!bot.isMaster) {
+            e.push({ id: 'e-' + bot.id, source: 'm1', target: bot.id, animated: true, style: { stroke: '#3b82f6', strokeWidth: 2 } });
+        }
+    });
+    return e;
+}
+
+const INITIAL_EDGES = buildEdges();
+
+function AuraFlow() {
+    const [nodes, setNodes] = useState([]);
+
+    const fetchStatus = useCallback(async () => {
+        try {
+            const res = await fetch('/api/status');
+            const st = await res.json();
+            const bots = st.bots || {};
+
+            setNodes(Object.values(STATIC_BOTS).map(cfg => {
+                // Determine status
+                let online = false;
+                if (cfg.isMaster) {
+                    online = st.master_online === true;
+                } else {
+                    // map label key to st.bots key
+                    const key = Object.keys(bots).find(k => cfg.label.toLowerCase().includes(k.toLowerCase())) || cfg.id;
+                    online = bots[key] === true || bots[key] === 'ONLINE' || bots[key] === 'online';
+                }
+
+                const bgColor = online ? '#2d4a3a' : '#3d1f2a';
+                const borderColor = online ? '#deff9a' : '#ef4444';
+                const nodeColor = online ? '#deff9a' : '#ef4444';
+
+                return {
+                    id: cfg.id,
+                    data: {
+                        label: (
+                            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+                                <span style={{ fontSize:12 }}>{cfg.label}</span>
+                                <span style={{ fontSize:10, color: nodeColor, fontWeight:700 }}>
+                                    {online ? '● ACTIVE' : '○ OFFLINE'}
+                                </span>
+                            </div>
+                        )
+                    },
+                    position: { x: cfg.x, y: cfg.y },
+                    style: {
+                        background: bgColor,
+                        color: '#e2e8f0',
+                        border: `2px solid ${borderColor}`,
+                        borderRadius: '12px',
+                        fontWeight: 600,
+                        width: 150,
+                        textAlign: 'center',
+                        padding: '8px 4px',
+                        fontSize: 13,
+                        boxShadow: online ? '0 0 12px rgba(222,255,154,0.25)' : 'none'
+                    }
+                };
+            }));
+        } catch(e) { console.error('Flow poll error', e); }
+    }, []);
+
+    useEffect(() => {
+        fetchStatus();
+        const iv = setInterval(fetchStatus, 5000);
+        return () => clearInterval(iv);
+    }, [fetchStatus]);
+
+    const onNodeClick = useCallback(async (evt, node) => {
+        // Toggle: find which bot key this node corresponds to
+        const entry = Object.entries(STATIC_BOTS).find(([,v]) => v.id === node.id);
+        if (!entry) return;
+        const botKey = entry[0];
+        try {
+            const st = await fetch('/api/status').then(r => r.json());
+            const bots = st.bots || {};
+            const isOnline = bots[botKey] === true || bots[botKey] === 'ONLINE' || bots[botKey] === 'online';
+            const action = isOnline ? 'stop' : 'start';
+            await fetch(`/${action}/${botKey}`);
+            fetchStatus();
+        } catch(e) { console.error('Toggle error', e); }
+    }, [fetchStatus]);
+
+    return (
+        <ReactFlow
+            nodes={nodes}
+            edges={INITIAL_EDGES}
+            onNodeClick={onNodeClick}
+            fitView
+            attributionPosition="bottom-left"
+        >
+            <Background color="#1e2d45" gap={20} />
+            <Controls />
+        </ReactFlow>
+    );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('flow-root'));
+root.render(<AuraFlow />);
+</script>
+</body>
+</html>

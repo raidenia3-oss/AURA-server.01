@@ -1,0 +1,30 @@
+{
+  "nodes": {
+    "OSINT_Tool": {
+      "label": "🔍 OSINT Engine",
+      "type": "intelligence",
+      "color": "#3b82f6",
+      "description": "Handles PhoneInfoga and Mr. Holmes lookups",
+      "connected_to": ["Ollama_Node"]
+    },
+    "Ollama_Node": {
+      "label": "🧠 Ollama LLM",
+      "type": "core",
+      "color": "#10b981",
+      "description": "Processes natural language and coordinates tools",
+      "connected_to": ["Automation_Node"]
+    },
+    "Automation_Node": {
+      "label": "⚙️ n8n Workflow",
+      "type": "automation",
+      "color": "#f59e0b",
+      "description": "Manages complex cross-platform workflows",
+      "connected_to": ["OSINT_Tool"]
+    }
+  },
+  "edges": [
+    { "source": "OSINT_Tool", "target": "Ollama_Node", "label": "results" },
+    { "source": "Ollama_Node", "target": "Automation_Node", "label": "trigger" },
+    { "source": "Automation_Node", "target": "OSINT_Tool", "label": "query" }
+  ]
+}

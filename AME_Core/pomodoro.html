@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pomodoro Timer</title>
+    <style>
+        :root {
+            --bg-color: #fdfdfd;
+            --text-color: #333;
+            --accent-color: #ff6b6b;
+            --secondary-color: #4ecdc4;
+            --card-bg: #ffffff;
+            --button-text: #fff;
+            --shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #121212;
+                --text-color: #e0e0e0;
+                --accent-color: #ff6b6b;
+                --secondary-color: #4ecdc4;
+                --card-bg: #1e1e1e;
+                --button-text: #fff;
+                --shadow: 0 10px 30px rgba(0,0,0,0.5);
+            }
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            transition: background-color 0.3s ease;
+        }
+
+        .container {
+            text-align: center;
+            background-color: var(--card-bg);
+            padding: 3rem;
+            border-radius: 2rem;
+            box-shadow: var(--shadow);
+            width: 90%;
+            max-width: 400px;
+            transition: background-color 0.3s ease;
+        }
+
+        h1 {
+            font-weight: 300;
+            margin-bottom: 2rem;
+            letter-spacing: 1px;
+        }
+
+        .timer-display {
+            font-size: 6rem;
+            font-weight: bold;
+            margin-bottom: 2rem;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .status-label {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+
+        button {
+            padding: 0.8rem 1.5rem;
+            font-size: 1rem;
+            border: none;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.2s;
+            color: var(--button-text);
+            font-weight: 600;
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+
+        #startPause {
+            background-color: var(--accent-color);
+            min-width: 120px;
+        }
+
+        #reset {
+            background-color: #888;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .break-mode .status-label {
+            color: var(--secondary-color);
+        }
+        
+        .break-mode #startPause {
+            background-color: var(--secondary-color);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container" id="appContainer">
+        <div class="status-label" id="status">Work Time</div>
+        <div class="timer-display" id="timer">25:00</div>
+        <div class="controls">
+            <button id="startPause">Iniciar</button>
+            <button id="reset">Reiniciar</button>
+        </div>
+    </div>
+
+    <script>
+        let timeLeft;
+        let timerId = null;
+        let isWorkTime = true;
+        let isRunning = false;
+
+        const WORK_TIME = 25 * 60;
+        const BREAK_TIME = 5 * 60;
+
+        const timerDisplay = document.getElementById('timer');
+        const statusLabel = document.getElementById('status');
+        const startPauseBtn = document.getElementById('startPause');
+        const resetBtn = document.getElementById('reset');
+        const appContainer = document.getElementById('appContainer');
+
+        function updateDisplay() {
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            timerDisplay.innerText = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            document.title = `${timerDisplay.innerText} - Pomodoro`;
+        }
+
+        function initTimer() {
+            timeLeft = isWorkTime ? WORK_TIME : BREAK_TIME;
+            statusLabel.innerText = isWorkTime ? 'Work Time' : 'Break Time';
+            
+            if (isWorkTime) {
+                appContainer.classList.remove('break-mode');
+            } else {
+                appContainer.classList.add('break-mode');
+            }
+            
+            updateDisplay();
+        }
+
+        function playNotification() {
+            // Use Web Audio API to generate a soft beep
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(440, audioCtx.currentTime); // A4 note
+            
+            gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.2, audioCtx.currentTime + 0.1);
+            gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.5);
+        }
+
+        function toggleTimer() {
+            if (isRunning) {
+                pauseTimer();
+            } else {
+                startTimer();
+            }
+        }
+
+        function startTimer() {
+            isRunning = true;
+            startPauseBtn.innerText = 'Pausar';
+            timerId = setInterval(() => {
+                timeLeft--;
+                updateDisplay();
+
+                if (timeLeft <= 0) {
+                    clearInterval(timerId);
+                    playNotification();
+                    isWorkTime = !isWorkTime;
+                    isRunning = false;
+                    startPauseBtn.innerText = 'Iniciar';
+                    alert(isWorkTime ? '¡Tiempo de trabajar!' : '¡Tiempo de descanso!');
+                    initTimer();
+                }
+            }, 1000);
+        }
+
+        function pauseTimer() {
+            isRunning = false;
+            startPauseBtn.innerText = 'Iniciar';
+            clearInterval(timerId);
+        }
+
+        function resetTimer() {
+            pauseTimer();
+            initTimer();
+        }
+
+        startPauseBtn.addEventListener('click', toggleTimer);
+        resetBtn.addEventListener('click', resetTimer);
+
+        // Initialize on load
+        initTimer();
+    </script>
+</body>
+</html>
