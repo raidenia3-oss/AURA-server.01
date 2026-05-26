@@ -1,30 +1,90 @@
 {
   "nodes": {
-    "OSINT_Tool": {
-      "label": "🔍 OSINT Engine",
-      "type": "intelligence",
-      "color": "#3b82f6",
-      "description": "Handles PhoneInfoga and Mr. Holmes lookups",
-      "connected_to": ["Ollama_Node"]
+    "AURA_MASTER": {
+      "id": "master",
+      "label": "◈ AURA MASTER",
+      "type": "core",
+      "color": "#8b5cf6",
+      "description": "Central command and orchestration",
+      "icon": "◈",
+      "connected_to": ["OLLAMA_LLM", "OSINT_ENGINE", "TERMUX_SYNC", "EXIFTOOL", "BLACKBIRD", "PHOTON"]
     },
-    "Ollama_Node": {
+    "OLLAMA_LLM": {
+      "id": "ollama",
       "label": "🧠 Ollama LLM",
       "type": "core",
       "color": "#10b981",
-      "description": "Processes natural language and coordinates tools",
-      "connected_to": ["Automation_Node"]
+      "description": "Local LLM for summarization, reasoning and orchestration",
+      "icon": "🧠",
+      "connected_to": ["AURA_MASTER"]
     },
-    "Automation_Node": {
-      "label": "⚙️ n8n Workflow",
+    "OSINT_ENGINE": {
+      "id": "osint",
+      "label": "🔍 OSINT Engine",
+      "type": "intelligence",
+      "color": "#3b82f6",
+      "description": "PhoneInfoga + Mr. Holmes lookups (phone & email)",
+      "icon": "🔍",
+      "connected_to": ["AURA_MASTER", "BLACKBIRD"]
+    },
+    "TERMUX_SYNC": {
+      "id": "termux",
+      "label": "📱 Termux Sync",
       "type": "automation",
       "color": "#f59e0b",
-      "description": "Manages complex cross-platform workflows",
-      "connected_to": ["OSINT_Tool"]
+      "description": "SCP/rsync bridge to mobile device (LG Q60)",
+      "icon": "📱",
+      "connected_to": ["AURA_MASTER", "OSINT_ENGINE"]
+    },
+    "EXIFTOOL": {
+      "id": "exiftool",
+      "label": "📸 ExifTool",
+      "type": "forensic",
+      "color": "#ec4899",
+      "description": "Metadata forensic analysis of images (.jpg, .png, .heic)",
+      "icon": "📸",
+      "light_package": "exiftool",
+      "connected_to": ["AURA_MASTER", "OSINT_ENGINE"]
+    },
+    "BLACKBIRD": {
+      "id": "blackbird",
+      "label": "🐦 Blackbird / Nexfil",
+      "type": "recon",
+      "color": "#f97316",
+      "description": "Username hunting across 300+ social platforms",
+      "icon": "🐦",
+      "light_package": "nexfil",
+      "connected_to": ["AURA_MASTER", "OSINT_ENGINE", "PHOTON"]
+    },
+    "PHOTON": {
+      "id": "photon",
+      "label": "🌐 Photon Crawler",
+      "type": "scraper",
+      "color": "#14b8a6",
+      "description": "Domain/web crawling (URLs, emails, JS, endpoints)",
+      "icon": "🌐",
+      "light_package": "photon",
+      "connected_to": ["AURA_MASTER", "BLACKBIRD", "OSINT_ENGINE"]
     }
   },
   "edges": [
-    { "source": "OSINT_Tool", "target": "Ollama_Node", "label": "results" },
-    { "source": "Ollama_Node", "target": "Automation_Node", "label": "trigger" },
-    { "source": "Automation_Node", "target": "OSINT_Tool", "label": "query" }
-  ]
+    { "source": "AURA_MASTER", "target": "OLLAMA_LLM",   "label": "control", "animated": true },
+    { "source": "AURA_MASTER", "target": "OSINT_ENGINE", "label": "control", "animated": true },
+    { "source": "AURA_MASTER", "target": "TERMUX_SYNC",  "label": "sync",   "animated": true },
+    { "source": "AURA_MASTER", "target": "EXIFTOOL",     "label": "forensic", "animated": true },
+    { "source": "AURA_MASTER", "target": "BLACKBIRD",    "label": "recon",   "animated": true },
+    { "source": "AURA_MASTER", "target": "PHOTON",       "label": "crawl",   "animated": true },
+    { "source": "OSINT_ENGINE", "target": "BLACKBIRD",   "label": "enrich",  "animated": false },
+    { "source": "BLACKBIRD",    "target": "PHOTON",      "label": "expand",  "animated": false },
+    { "source": "EXIFTOOL",    "target": "OSINT_ENGINE", "label": "meta",    "animated": false }
+  ],
+  "skill_forge": {
+    "enabled": true,
+    "combined_flows": [
+      { "trigger": ["BLACKBIRD", "OSINT_ENGINE"], "label": "username-to-phone", "description": "Find user → Lookup associated phone number" },
+      { "trigger": ["BLACKBIRD", "PHOTON"],       "label": "username-to-domain", "description": "Find user → Crawl profiles for intel" },
+      { "trigger": ["PHOTON", "EXIFTOOL"],        "label": "domain-images",      "description": "Crawl domain → Extract metadata from found images" },
+      { "trigger": ["EXIFTOOL", "OSINT_ENGINE"],  "label": "image-to-number",    "description": "Image metadata → Extract phone/email from EXIF" }
+    ]
+  }
 }

@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AURA Core — Situation Room</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{{ url_for('static', filename='js/wifi_radar.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/hologram_gestures.js') }}"></script>
+    <!-- Three.js para interfaz 3D -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* Radar tactical summary block */
+        .radar-summary {
+            font-size: 0.75rem;
+            line-height: 1.6;
+            color: var(--accent-cyan);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .radar-summary strong {
+            color: var(--green);
+        }
+        .radar-meta {
+            font-family: var(--font-mono);
+            font-size: 0.55rem;
+            color: var(--text-dim);
+            margin-top: 8px;
+            padding-top: 6px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+        }
+        .priority-high { color: var(--red); font-weight: 700; }
+        .priority-med  { color: var(--yellow); font-weight: 600; }
+        .priority-low  { color: var(--text-dim); }
+        .void-badge {
+            display: inline-block;
+            background: var(--accent-pink);
+            color: #000;
+            font-family: var(--font-mono);
+            font-size: 0.5rem;
+            padding: 1px 5px;
+            border-radius: 3px;
+            margin-left: 4px;
+            vertical-align: middle;
+        }
+        /* ── Early Warning sections (OSINT Radar v3) ── */
+        .early-section {
+            margin-bottom: 10px;
+            padding: 6px 8px;
+            border-radius: 4px;
+            border-left: 3px solid transparent;
+        }
+        .early-red {
+            background: rgba(255, 51, 102, 0.08);
+            border-left-color: var(--red);
+        }
+        .early-yellow {
+            background: rgba(255, 204, 0, 0.08);
+            border-left-color: var(--yellow);
+        }
+        .early-green {
+            background: rgba(0, 255, 136, 0.06);
+            border-left-color: var(--green);
+        }
+        .early-section ul {
+            margin: 4px 0 0 0;
+            padding-left: 14px;
+            list-style: none;
+        }
+        .early-section ul li {
+            font-size: 0.7rem;
+            line-height: 1.5;
+            color: var(--text-primary);
+            margin-bottom: 3px;
+            position: relative;
+            padding-left: 10px;
+        }
+        .early-section ul li::before {
+            content: '›';
+            position: absolute;
+            left: 0;
+            color: var(--text-dim);
+            font-weight: 700;
+        }
+        .early-section ul li strong {
+            color: var(--accent-cyan);
+        }
+        .early-section ul li em {
+            color: var(--text-dim);
+            font-style: italic;
+        }
+        /* ── Watchlist Panel ── */
+        .watchlist-panel {
+            position: fixed;
+            right: 0;
+            top: 50px;
+            width: 240px;
+            max-height: 60vh;
+            background: rgba(15, 23, 42, 0.95);
+            border-left: 2px solid rgba(0, 212, 255, 0.3);
+            border-radius: 0;
+            overflow-y: auto;
+            font-family: var(--font-mono);
+            font-size: 0.65rem;
+            z-index: 99;
+        }
+        .watchlist-panel.hidden { display: none; }
+        .watchlist-header {
+            padding: 8px;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+            background: rgba(0, 212, 255, 0.05);
+            color: var(--accent-cyan);
+            font-weight: 600;
+        }
+        .watchlist-input-group {
+            padding: 6px;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+            display: flex;
+            gap: 4px;
+            flex-direction: column;
+        }
+        .watchlist-input-group input {
+            background: rgba(255,255,255, 0.05);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            color: var(--accent-cyan);
+            padding: 4px 6px;
+            font-size: 0.6rem;
+            border-radius: 2px;
+            font-family: var(--font-mono);
+        }
+        .watchlist-input-group button {
+            background: rgba(0, 212, 255, 0.15);
+            border: 1px solid rgba(0, 212, 255, 0.4);
+            color: var(--accent-cyan);
+            padding: 4px;
+            font-size: 0.55rem;
+            cursor: pointer;
+            border-radius: 2px;
+            transition: all 0.2s;
+        }
+        .watchlist-input-group button:hover { background: rgba(0, 212, 255, 0.25); }
+        .watchlist-items {
+            padding: 6px;
+            max-height: calc(60vh - 90px);
+            overflow-y: auto;
+        }
+        .watchlist-item {
+            padding: 6px;
+            margin-bottom: 4px;
+            background: rgba(0, 212, 255, 0.08);
+            border-left: 2px solid var(--accent-cyan);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .watchlist-item:hover { background: rgba(0, 212, 255, 0.15); }
+        .watchlist-item-text { flex: 1; word-break: break-word; }
+        .watchlist-item-del {
+            background: rgba(255, 51, 102, 0.3);
+            color: var(--red);
+            border: none;
+            padding: 2px 4px;
+            font-size: 0.5rem;
+            cursor: pointer;
+            border-radius: 2px;
+        }
+        .watchlist-item-del:hover { background: rgba(255, 51, 102, 0.5); }
+        /* ── Highlight watchlist matches ── */
+        .watchlist-match {
+            background: rgba(255, 204, 0, 0.15);
+            border-left: 3px solid var(--yellow) !important;
+            box-shadow: 0 0 10px rgba(255, 204, 0, 0.2);
+        }
+        /* ── Ticker toggle button ── */
+        .ticker-toggle {
+            position: fixed;
+            right: 10px;
+            top: 60px;
+            background: rgba(0, 212, 255, 0.2);
+            border: 1px solid rgba(0, 212, 255, 0.4);
+            color: var(--accent-cyan);
+            padding: 4px 8px;
+            font-size: 0.6rem;
+            cursor: pointer;
+            border-radius: 2px;
+            z-index: 100;
+            font-family: var(--font-mono);
+        }
+        .ticker-toggle:hover { background: rgba(0, 212, 255, 0.3); }
+        /* ── Dynamic ticker track ── */
+        .ticker-track.live {
+            animation: marquee 30s linear infinite;
+        }
+        @keyframes marquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-100%); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>◈ <span>AURA</span> Core · Situation Room</h1>
+    <div class="health-tag"><span class="dot" id="dot"></span><span id="statusLabel">CONNECTING…</span></div>
+</div>
+
+<!-- ═══ Ticker Táctico (Alertas Globales) ═══ -->
+<div class="ticker-wrap" id="tickerWrap">
+    <span class="ticker-label">▶ LIVE</span>
+    <div class="ticker-track live" id="tickerTrack"></div>
+</div>
+
+<!-- ═══ Watchlist Panel ═══ -->
+<div class="watchlist-panel" id="watchlistPanel">
+    <div class="watchlist-header">🎯 WATCHLIST</div>
+    <div class="watchlist-input-group">
+        <input type="text" id="watchlistInput" placeholder="Objetivo (dominio, email, IP)">
+        <button id="watchlistAddBtn">+ ADD</button>
+    </div>
+    <div class="watchlist-items" id="watchlistItems"></div>
+</div>
+
+<button class="ticker-toggle" id="watchlistToggle">👁 WATCHLIST</button>
+
+<div class="grid">
+    <!-- Panel 1: AURA Chat (Spectre) con VOID interception -->
+    <div class="panel">
+        <div class="panel-header"><span>💬 AURA Chat · Spectre</span><span style="color:var(--text-dim);font-size:0.55rem;">deepseek + void</span></div>
+        <div class="panel-body" style="display:flex;flex-direction:column;">
+            <div class="chat-messages" id="chatMessages">
+                <div class="chat-msg ai"><div class="sender">▲ AURA</div><div class="text">Sistema listo. Escribe un mensaje o usa <strong>guarda:</strong> / <strong>void:</strong> para memoria persistente.</div></div>
+            </div>
+            <div class="chat-input-row">
+                <input type="text" id="chatInput" placeholder="Mensaje para AURA...">
+                <button id="chatBtn">→</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel 2: OSINT Radar — Resumen Ejecutivo Táctico -->
+    <div class="panel">
+        <div class="panel-header">
+            <span>📡 OSINT Radar · Briefing Táctico</span>
+            <button id="radarBtn" class="btn-tactical">⟳ Refresh</button>
+        </div>
+        <div class="panel-body" id="radarContent">
+            <p>Cargando radar...</p>
+        </div>
+    </div>
+
+    <!-- Panel 3: Tactical Intelligence Radar (B.L.U.E.) + CSI Spectrum -->
+    <div class="panel">
+        <div class="panel-header">
+            <span>📡 Tactical Intel · B.L.U.E.</span>
+            <span id="spectrumStatus" class="spectrum-status spectrum-normal">📡 COMPILANDO ESPECTRO: NORMAL</span>
+        </div>
+        <div class="panel-body">
+            <div class="market-metrics">
+                <div class="metric-tile glow-active"><div class="val" id="mThreat">—</div><div class="lbl">Threat Index</div></div>
+                <div class="metric-tile"><div class="val" id="mVolume">—</div><div class="lbl">Network Vol</div></div>
+                <div class="metric-tile"><div class="val" id="mAnomalies">—</div><div class="lbl">Anomalies</div></div>
+            </div>
+            <div class="chart-box"><canvas id="tacticalChart"></canvas></div>
+            <div class="event-console" id="eventConsole"></div>
+        </div>
+    </div>
+
+    <!-- Panel 6: Hologram Gestures (MediaPipe) -->
+    <div class="panel">
+        <div class="panel-header"><span>🤖 Hologram Gestures</span><span style="color:var(--text-dim);font-size:0.55rem;">MediaPipe Hands</span></div>
+        <div class="panel-body" style="position:relative;">
+            <video id="gestureVideo" style="display:none;width:100%;height:240px;background:#000;border-radius:4px;"></video>
+            <canvas id="gestureCanvas" style="width:100%;height:240px;background:rgba(0,212,255,0.03);border-radius:4px;"></canvas>
+            <div id="gestureStatus" style="position:absolute;top:8px;left:8px;font-family:var(--font-mono);font-size:0.6rem;color:var(--text-dim);">📹 Webcam: OFF</div>
+        </div>
+    </div>
+
+    <!-- Panel 4: VOID Log Terminal -->
+    <div class="panel">
+        <div class="panel-header"><span>🕳️ VOID Log · Terminal</span><span style="color:var(--text-dim);font-size:0.55rem;">persistent memory</span></div>
+        <div class="panel-body void-term">
+            <textarea id="voidInput" rows="2" placeholder="Ingresa dato para memoria persistente..."></textarea>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <button id="voidBtn">⤓ Sync to VOID</button>
+                <span class="feedback" id="voidFeedback">&nbsp;</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel 5: Antigravity Nodes (3D) -->
+    <div class="panel">
+        <div class="panel-header"><span>🌌 Antigravity Nodes</span><span style="color:var(--text-dim);font-size:0.55rem;">3D graph</span></div>
+        <div class="panel-body" style="position:relative;">
+            <div id="antigravity-nodes" style="width:100%;height:240px;background:rgba(0,212,255,0.03);border-radius:4px;"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dot = document.getElementById('dot');
+    const lbl = document.getElementById('statusLabel');
+    async function pollStatus() {
+        try {
+            const r = await fetch('/api/status'); if (!r.ok) throw Error();
+            const st = await r.json();
+            const ok = st.system_health === 'healthy' || st.master_online;
+            dot.className = ok ? 'dot ok' : 'dot bad';
+            lbl.textContent = ok ? 'ONLINE' : 'DEGRADED';
+            lbl.style.color = ok ? 'var(--green)' : 'var(--red)';
+        } catch(e) { dot.className = 'dot bad'; lbl.textContent = 'DOWN'; lbl.style.color = 'var(--red)'; }
+    }
+    pollStatus(); setInterval(pollStatus, 5000);
+
+    // ═══════════════════════════════════════════
+    // Panel 1: AURA Chat (Spectre + VOID)
+    // ═══════════════════════════════════════════
+    const chatInput = document.getElementById('chatInput');
+    const chatBtn = document.getElementById('chatBtn');
+    const chatBox = document.getElementById('chatMessages');
+    async function sendChat() {
+        const msg = chatInput.value.trim(); if (!msg) return;
+        chatInput.value = '';
+        chatBox.innerHTML += `<div class="chat-msg user"><div class="sender">◈ YOU</div><div class="text">${escapeHtml(msg)}</div></div>`;
+        chatBox.scrollTop = chatBox.scrollHeight;
+        chatBox.innerHTML += `<div class="chat-msg ai" id="loadingMsg"><div class="sender">▲ AURA</div><div class="text">⏳ pensando...</div></div>`;
+        try {
+            const resp = await fetch('/api/chat', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({message: msg})
+            });
+            const data = await resp.json();
+            document.getElementById('loadingMsg').remove();
+            const reply = escapeHtml(data.response || data.error || '(sin respuesta)');
+            const provider = data.provider || 'local';
+            // Mostrar badge si fue guardado en VOID
+            const voidBadge = (data.task_type === 'void_save') ? '<span class="void-badge">VOID ✓</span>' : '';
+            const providerTag = escapeHtml((provider === 'void') ? 'void_memory' : provider);
+            chatBox.innerHTML += `<div class="chat-msg ai"><div class="sender">▲ AURA ${voidBadge}<span style="color:var(--text-dim);font-size:0.5rem;margin-left:4px;">(${providerTag})</span></div><div class="text">${reply}</div></div>`;
+        } catch(e) {
+            document.getElementById('loadingMsg').remove();
+            chatBox.innerHTML += `<div class="chat-msg ai"><div class="sender">▲ AURA</div><div class="text" style="color:var(--red);">Error: ${e.message}</div></div>`;
+        }
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+    chatBtn.addEventListener('click', sendChat);
+    chatInput.addEventListener('keydown', e => { if(e.key === 'Enter') { e.preventDefault(); sendChat(); } });
+
+    // ═══════════════════════════════════════════
+    // WATCHLIST MANAGEMENT
+    // ═══════════════════════════════════════════
+    const watchlistPanel = document.getElementById('watchlistPanel');
+    const watchlistToggle = document.getElementById('watchlistToggle');
+    const watchlistInput = document.getElementById('watchlistInput');
+    const watchlistAddBtn = document.getElementById('watchlistAddBtn');
+    const watchlistItems = document.getElementById('watchlistItems');
+    let watchlistData = [];
+
+    watchlistToggle.addEventListener('click', () => {
+        watchlistPanel.classList.toggle('hidden');
+    });
+
+    async function loadWatchlist() {
+        try {
+            const r = await fetch('/api/watchlist');
+            const d = await r.json();
+            watchlistData = d.watchlist || [];
+            renderWatchlist();
+        } catch(e) { console.error('Watchlist load error:', e); }
+    }
+
+    function renderWatchlist() {
+        watchlistItems.innerHTML = watchlistData.map(item => `
+            <div class="watchlist-item">
+                <span class="watchlist-item-text">${escapeHtml(item.target)}</span>
+                <button class="watchlist-item-del" onclick="deleteWatchlistItem('${item.id}')">✕</button>
+            </div>
+        `).join('');
+    }
+
+    window.deleteWatchlistItem = async function(id) {
+        watchlistData = watchlistData.filter(x => x.id !== id);
+        renderWatchlist();
+    };
+
+    watchlistAddBtn.addEventListener('click', async () => {
+        const target = watchlistInput.value.trim();
+        if (!target) return;
+        try {
+            const r = await fetch('/api/watchlist', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target: target, type: 'domain', tags: ['watchlist'] })
+            });
+            if (r.ok) {
+                watchlistInput.value = '';
+                loadWatchlist();
+            }
+        } catch(e) { console.error('Watchlist add error:', e); }
+    });
+
+    watchlistInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); watchlistAddBtn.click(); }
+    });
+
+    loadWatchlist();
+
+    function highlightWatchlistMatches() {
+        if (watchlistData.length === 0) return;
+        const radarContent = document.getElementById('radarContent');
+        const items = radarContent.querySelectorAll('li, .early-section');
+        items.forEach(item => {
+            const text = item.textContent.toLowerCase();
+            const matches = watchlistData.some(w => text.includes(w.target.toLowerCase()));
+            if (matches) {
+                item.classList.add('watchlist-match');
+            }
+        });
+    }
+
+    // ═══════════════════════════════════════════
+    // DYNAMIC TICKER
+    // ═══════════════════════════════════════════
+    async function updateTicker() {
+        try {
+            const r = await fetch('/api/get_latest_intel');
+            const d = await r.json();
+            const tickerTrack = document.getElementById('tickerTrack');
+            if (d.items && d.items.length > 0) {
+                const html = d.items.map((item, idx) => `
+                    <span class="ticker-item"><span class="tick-${idx % 3 === 0 ? 'info' : idx % 3 === 1 ? 'critical' : 'warning'}">•</span> ${escapeHtml(item)}</span>
+                `).join('');
+                tickerTrack.innerHTML = html + html;
+            }
+        } catch(e) { console.error('Ticker update error:', e); }
+    }
+    updateTicker();
+    setInterval(updateTicker, 8000);
+
+    // ═══════════════════════════════════════════
+    // Panel 2: OSINT Radar — Resumen Táctico (Roba Ideas)
+    // ═══════════════════════════════════════════
+    const radarContent = document.getElementById('radarContent');
+    async function loadRadar() {
+        try {
+            const r = await fetch('/api/radar'); if (!r.ok) throw Error();
+            const data = await r.json();
+            if (data.status === 'ok' && data.tactical_html) {
+                // El backend ya devuelve HTML estructurado (<ul>/<li>) generado por la IA
+                const metaHtml = `
+                    <div class="radar-meta">
+                        <span>📰 ${data.total_headlines || 0} headlines · ${data.total_sources || 0} fuentes</span>
+                        <span>${data.auto_refreshed ? '⟳ auto-refrescado' : '✓ en caché'}</span>
+                        <span>${data.timestamp ? new Date(data.timestamp).toLocaleString() : ''}</span>
+                    </div>
+                `;
+                radarContent.innerHTML = data.tactical_html + metaHtml;
+            } else if (data.status === 'ok' && data.summary) {
+                // Fallback: mostrar resumen textual si no hay HTML
+                const metaHtml = `
+                    <div class="radar-meta">
+                        <span>📰 ${data.total_headlines || 0} headlines</span>
+                        <span>${data.timestamp ? new Date(data.timestamp).toLocaleString() : ''}</span>
+                    </div>
+                `;
+                radarContent.innerHTML = `<div class="radar-summary">${data.summary}</div>` + metaHtml;
+            } else {
+                radarContent.innerHTML = `<p>${data.summary || 'Sin datos de radar.'}</p>`;
+            }
+            highlightWatchlistMatches();
+        } catch(e) { radarContent.innerHTML = `<p style="color:var(--red);">Error: ${e.message}</p>`; }
+    }
+
+    loadRadar();
+    document.getElementById('radarBtn').addEventListener('click', async () => {
+        radarContent.innerHTML = '<p>⟳ Generando radar táctico con IA...</p>';
+        try {
+            // Forzar refresco del briefing en el backend
+            await fetch('/api/briefing/refresh', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+            await loadRadar();
+        } catch(e) { radarContent.innerHTML = `<p style="color:var(--red);">Error: ${e.message}</p>`; }
+    });
+    // Auto-refresh cada 5 minutos
+    setInterval(loadRadar, 300000);
+
+    // ═══════════════════════════════════════════
+    // Panel 3: Tactical Intelligence Radar (B.L.U.E.)
+    // ═══════════════════════════════════════════
+    // ═══════════════════════════════════════════
+    // CSI Spectrum Scanner — WiFi Radar (Panel 3)
+    // ═══════════════════════════════════════════
+    const spectrumEl = document.getElementById('spectrumStatus');
+    const eventConsole = document.getElementById('eventConsole');
+    let eventLog = [];
+    const MAX_EVENTS = 12;
+
+    function addEvent(tag, message, cssClass) {
+        const ts = new Date().toLocaleTimeString('es-PE', { hour12: false });
+        const line = `<div class="event-line"><span class="ts">[${ts}]</span> <span class="${cssClass}">[${tag}]</span> ${message}</div>`;
+        eventLog.push(line);
+        if (eventLog.length > MAX_EVENTS) eventLog.shift();
+        eventConsole.innerHTML = eventLog.join('');
+        eventConsole.scrollTop = eventConsole.scrollHeight;
+    }
+
+    async function pollWiFiRadar() {
+        try {
+            const r = await fetch('/api/wifi_radar');
+            if (!r.ok) throw Error('HTTP ' + r.status);
+            const data = await r.json();
+
+            // Actualizar indicador de presencia
+            if (data.presence_detected) {
+                spectrumEl.className = 'spectrum-status spectrum-alert';
+                spectrumEl.innerHTML = data.is_human
+                    ? '⚠ ALERTA HUMANA: MOVIMIENTO DETECTADO'
+                    : '⚠ SEÑAL PERTURBADA: PRESENCIA DETECTADA';
+                addEvent('CSI_CORE', '⚠ PRESENCIA DETECTADA — perturbation: ' + data.perturbation_index + '%', 'tag-warn');
+                if (data.is_human) {
+                    addEvent('CSI_CORE', '👤 FIRMA HUMANA IDENTIFICADA — emitiendo alerta de voz', 'tag-warn');
+                }
+                // Inyectar alerta al ticker
+                const tickerTrack = document.getElementById('tickerTrack');
+                if (tickerTrack) {
+                    // Añadir alerta temporal (opcional visual)
+                }
+            } else {
+                spectrumEl.className = 'spectrum-status spectrum-normal';
+                spectrumEl.innerHTML = '📡 COMPILANDO ESPECTRO: NORMAL';
+            }
+
+            if (typeof updateWiFiRadarChart === 'function') {
+                updateWiFiRadarChart(data);
+            }
+            if (data.is_human && typeof announceHumanPresence === 'function') {
+                announceHumanPresence(data);
+            }
+
+            // Opcional: mostrar nodos CSI en consola cada 4 ciclos
+            if (Math.random() < 0.3) {
+                const nodeStr = Object.entries(data.nodes).map(([k,v]) => `${k}:${v}dBm`).join(' ');
+                addEvent('CSI_NODES', `${nodeStr} | SNR: ${data.snr_avg}dB`, 'tag-csi');
+            }
+        } catch(e) {
+            spectrumEl.className = 'spectrum-status spectrum-alert';
+            spectrumEl.innerHTML = '⚠ ERROR DE LECTURA DE ESPECTRO';
+            addEvent('CSI_ERR', e.message, 'tag-err');
+        }
+    }
+
+    // Inicializar consola con eventos de arranque
+    addEvent('CSI_CORE', 'INITIALIZING WIRELESS SENSING ARCHITECTURE...', 'tag-csi');
+    addEvent('CSI_CORE', 'CAPTURING CHANNEL STATE INFORMATION (CSI)...', 'tag-csi');
+    addEvent('AI_ROUTER', 'ALL CHANNELS OPERATIONAL. SITUATION ROOM READY.', 'tag-ai');
+
+    // Iniciar polling cada 2 segundos
+    pollWiFiRadar();
+    setInterval(pollWiFiRadar, 2000);
+
+    // ═══════════════════════════════════════════
+    // Panel 4: VOID Terminal
+    // ═══════════════════════════════════════════
+    const voidInput = document.getElementById('voidInput');
+    const voidBtn   = document.getElementById('voidBtn');
+    const voidFb    = document.getElementById('voidFeedback');
+    voidBtn.addEventListener('click', async () => {
+        const text = voidInput.value.trim(); if (!text) return;
+        voidFb.textContent = '⏳...'; voidFb.style.color = 'var(--text-dim)';
+        try {
+            const r = await fetch('/api/void/save', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({content: text, tags:['dashboard','void']})
+            });
+            const d = await r.json();
+            if (d.status === 'ok') { voidFb.textContent = `✅ ${d.filename}`; voidFb.style.color = 'var(--accent-pink)'; voidInput.value = ''; }
+            else { voidFb.textContent = `⚠️ ${d.message||'error'}`; voidFb.style.color = 'var(--red)'; }
+        } catch(e) { voidFb.textContent = `❌ ${e.message}`; voidFb.style.color = 'var(--red)'; }
+        setTimeout(() => { voidFb.innerHTML = '&nbsp;'; }, 4000);
+    });
+
+    // ═══════════════════════════════════════════
+    // Util: escape HTML
+    // ═══════════════════════════════════════════
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Expose escapeHtml globally for onclick handlers
+    window.escapeHtml = escapeHtml;
+});
+</script>
+</body>
+</html>

@@ -2,483 +2,239 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AURA · Dashboard</title>
-    <!-- React Flow UMD - todo local/lightweight -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AURA · Forja de Habilidades</title>
+
+    <!-- CDNs React Flow UMD -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@reactflow/core@11.10.1/dist/umd/index.js"></script>
     <script src="https://unpkg.com/@reactflow/background@11.10.1/dist/umd/index.js"></script>
     <script src="https://unpkg.com/@reactflow/controls@11.10.1/dist/umd/index.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
         :root {
-            --bg: #0b1120;
-            --card: #131c31;
-            --border: #1e2d45;
-            --text: #e2e8f0;
-            --text-dim: #64748b;
-            --green: #deff9a;
-            --red: #ef4444;
-            --blue: #3b82f6;
-            --accent: #8b5cf6;
+            --bg: #0a0f1e; --card: #111827; --border: #1f2937;
+            --text: #f1f5f9; --text-dim: #6b7280;
+            --green: #deff9a; --red: #ef4444; --blue: #3b82f6; --accent: #8b5cf6;
         }
 
-        body {
-            background: var(--bg);
-            color: var(--text);
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
-            min-height: 100vh;
-            font-size: 14px;
-        }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace; font-size: 14px; overflow-x: hidden; }
 
-        .app {
-            display: flex;
-            min-height: 100vh;
-        }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
+        .header h1 { font-size: 1rem; font-weight: 700; }
+        .header h1 span { color: var(--accent); }
+        .health-tag { display: flex; align-items: center; gap: 5px; font-size: 0.7rem; padding: 3px 8px; border-radius: 20px; background: var(--bg); border: 1px solid var(--border); }
+        .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+        .dot.ok  { background: var(--green); box-shadow: 0 0 5px var(--green); }
+        .dot.bad { background: var(--red);   box-shadow: 0 0 5px var(--red); }
 
-        /* ----- SIDEBAR ----- */
-        .sidebar {
-            width: 220px;
-            background: #060d18;
-            border-right: 1px solid var(--border);
-            padding: 1.5rem 1rem;
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
+        .stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; padding: 8px 14px; background: var(--card); border-bottom: 1px solid var(--border); }
+        .stat-item { text-align: center; }
+        .stat-item .val { font-size: 1.2rem; font-weight: 700; }
+        .stat-item .lbl { font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; }
+        .val.online { color: var(--green); } .val.offline { color: var(--red); }
 
-        .logo {
-            font-size: 1.25rem;
-            font-weight: 800;
-            color: var(--accent);
-            letter-spacing: 1px;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid var(--border);
+        /* ── Skill Forge section ── */
+        .forge-bar {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 8px; padding: 6px 14px;
+            background: var(--card); border-bottom: 1px solid var(--border);
+            font-size: 0.75rem;
         }
-        .logo span { color: var(--text); font-weight: 300; }
+        .forge-bar .forge-label { color: var(--accent); font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
+        .forge-bar .forge-status { color: var(--text-dim); flex: 1; }
+        .forge-bar .forge-btn {
+            background: var(--accent); color: #fff; border: none;
+            border-radius: 6px; padding: 4px 12px; font-size: 0.7rem;
+            font-weight: 600; cursor: pointer; transition: 0.15s;
+        }
+        .forge-bar .forge-btn:hover { filter: brightness(1.2); }
+        .forge-bar .forge-btn:disabled { opacity: 0.4; cursor: default; }
 
-        .nav-item {
-            padding: 0.6rem 0.8rem;
-            border-radius: 6px;
-            color: var(--text-dim);
-            cursor: pointer;
-            transition: 0.15s;
-            font-size: 0.85rem;
-        }
-        .nav-item:hover { background: var(--card); color: var(--text); }
-        .nav-item.active { background: var(--blue); color: #fff; }
+        /* ── Canvas ── */
+        .canvas-wrap { width: 100%; height: calc(100vh - 195px); min-height: 300px; background: #060b16; position: relative; }
+        #flow-root { width: 100%; height: 100%; }
 
-        /* ----- MAIN ----- */
-        .main {
-            flex: 1;
-            padding: 1.5rem 2rem;
-            max-width: 1300px;
-        }
+        /* ── Bottom health log ── */
+        .health-log { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(6,11,22,0.95); border-top: 1px solid var(--border); padding: 5px 10px; font-size: 0.55rem; color: var(--text-dim); font-family: monospace; max-height: 32px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; z-index: 20; }
 
-        .topbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-        }
-        .topbar h1 { font-size: 1.3rem; font-weight: 600; }
-
-        .health-badge {
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-            background: var(--card);
-            padding: 0.4rem 1rem;
-            border-radius: 20px;
-            border: 1px solid var(--border);
-            font-size: 0.8rem;
-        }
-        .health-dot {
-            width: 8px; height: 8px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-        .health-dot.ok  { background: var(--green); box-shadow: 0 0 6px var(--green); }
-        .health-dot.bad { background: var(--red);   box-shadow: 0 0 6px var(--red); }
-
-        /* ----- STATS ROW ----- */
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px,1fr));
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-        .stat-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 1rem 1.2rem;
-        }
-        .stat-card .label { color: var(--text-dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
-        .stat-card .value { font-size: 1.4rem; font-weight: 700; margin-top: 4px; }
-        .stat-card .sub   { font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; }
-
-        .stat-card.online .value { color: var(--green); }
-        .stat-card.offline .value { color: var(--red); }
-
-        /* ----- FLOW CANVAS ----- */
-        .flow-section {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 1rem;
-            margin-bottom: 1.5rem;
-        }
-        .flow-section .section-title {
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: var(--text-dim);
-            margin-bottom: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        #flow-root {
-            height: 420px;
-            width: 100%;
-            background: #050b15;
-            border-radius: 8px;
-            border: 1px solid var(--border);
-        }
-
-        /* ----- OSINT PANEL ----- */
-        .osint-panel {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 1rem 1.2rem;
-        }
-        .osint-panel .section-title {
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: var(--text-dim);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 0.8rem;
-        }
-        .osint-row {
-            display: flex;
-            gap: 0.6rem;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        .osint-row input {
-            flex: 1;
-            min-width: 200px;
-            background: #050b15;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 0.5rem 0.8rem;
-            color: var(--text);
-            font-family: monospace;
-            font-size: 0.85rem;
-        }
-        .osint-row select {
-            background: #050b15;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 0.5rem 0.8rem;
-            color: var(--text);
-            font-size: 0.85rem;
-        }
-        .btn {
-            padding: 0.5rem 1.2rem;
-            border: none;
-            border-radius: 6px;
-            font-weight: 600;
-            cursor: pointer;
-            font-size: 0.8rem;
-            transition: 0.15s;
-        }
-        .btn:hover { filter: brightness(1.15); }
-        .btn-primary { background: var(--blue); color: #fff; }
-        .btn-danger  { background: var(--red);  color: #fff; }
-        .btn-accent  { background: var(--accent); color: #fff; }
-
-        .osint-result {
-            margin-top: 0.8rem;
-            background: #050b15;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 0.8rem;
-            font-family: monospace;
-            font-size: 0.8rem;
-            max-height: 200px;
-            overflow-y: auto;
-            white-space: pre-wrap;
-            color: var(--text-dim);
-        }
-
-        /* ----- RESPONSIVE ----- */
-        @media (max-width: 700px) {
-            .sidebar { display: none; }
-            .main { padding: 1rem; }
+        @media (max-width: 480px) {
+            .header h1 { font-size: 0.9rem; }
+            .stats-row { grid-template-columns: repeat(2,1fr); }
         }
     </style>
 </head>
 <body>
-<div class="app">
-    <!-- SIDEBAR -->
-    <nav class="sidebar">
-        <div class="logo">◈ AURA <span>v2</span></div>
-        <div class="nav-item active">📊 Dashboard</div>
-        <div class="nav-item">🤖 Bots</div>
-        <div class="nav-item">🔍 OSINT</div>
-        <div class="nav-item">⚙️ Settings</div>
-        <div style="flex:1"></div>
-        <div class="nav-item" style="color:var(--text-dim);font-size:0.75rem;">
-            LG Q60 · LAN
-        </div>
-    </nav>
 
-    <!-- MAIN -->
-    <main class="main">
-        <!-- Top bar -->
-        <div class="topbar">
-            <h1>◈ Command Center</h1>
-            <div class="health-badge" id="healthBadge">
-                <span class="health-dot" id="healthDot"></span>
-                <span id="healthLabel">Checking…</span>
-                <span style="color:var(--text-dim);margin-left:4px;" id="healthRam"></span>
-            </div>
-        </div>
-
-        <!-- Stats -->
-        <div class="stats" id="statsGrid">
-            <div class="stat-card online">
-                <div class="label">AURA MASTER</div>
-                <div class="value" id="statMaster">● ONLINE</div>
-                <div class="sub">Core controller</div>
-            </div>
-            <div class="stat-card" id="statBotsCard">
-                <div class="label">Active Bots</div>
-                <div class="value" id="statBotsCount">0</div>
-                <div class="sub">of <span id="statBotsTotal">0</span> registered</div>
-            </div>
-            <div class="stat-card">
-                <div class="label">RAM Free</div>
-                <div class="value" id="statRam">—</div>
-                <div class="sub">on PC server</div>
-            </div>
-            <div class="stat-card">
-                <div class="label">Uptime</div>
-                <div class="value" id="statUptime">—</div>
-                <div class="sub">since last restart</div>
-            </div>
-        </div>
-
-        <!-- React Flow Canvas -->
-        <div class="flow-section">
-            <div class="section-title">◈ Bot Topology (live)</div>
-            <div id="flow-root"></div>
-            <div style="margin-top:0.5rem;font-size:0.7rem;color:var(--text-dim);text-align:center;">
-                Click a node to toggle service · polling every 5s
-            </div>
-        </div>
-
-        <!-- OSINT Panel -->
-        <div class="osint-panel">
-            <div class="section-title">🔍 OSINT Recon (PhoneInfoga / Mr. Holmes)</div>
-            <div class="osint-row">
-                <select id="osintTool">
-                    <option value="phone">📞 PhoneInfoga</option>
-                    <option value="email">✉️ Mr. Holmes</option>
-                </select>
-                <input type="text" id="osintTarget" placeholder="Target… e.g. +34123456789 or email@example.com" />
-                <button class="btn btn-accent" id="osintRunBtn">▶ Scan</button>
-                <button class="btn btn-danger" id="osintClearBtn">✕ Clear</button>
-            </div>
-            <div class="osint-result" id="osintResult">⏎ results will appear here…</div>
-        </div>
-    </main>
+<!-- Header -->
+<div class="header">
+    <h1>⚒️ <span>AURA</span> Forja</h1>
+    <div class="health-tag"><span class="dot" id="dot"></span><span id="statusLabel">CONNECTING…</span></div>
 </div>
 
-<!-- ===== VANILLA JS: polling & OSINT ===== -->
+<!-- Stats -->
+<div class="stats-row" id="stats">
+    <div class="stat-item"><div class="val" id="svMaster">—</div><div class="lbl">Master</div></div>
+    <div class="stat-item"><div class="val" id="svRam">—</div><div class="lbl">RAM</div></div>
+    <div class="stat-item"><div class="val" id="svUptime">—</div><div class="lbl">Uptime</div></div>
+</div>
+
+<!-- Skill Forge Bar -->
+<div class="forge-bar" id="forgeBar">
+    <span class="forge-label">🔨 Skill Forge</span>
+    <span class="forge-status" id="forgeStatus">Connect two tool-nodes to create a Combined Flow</span>
+    <button class="forge-btn" id="forgeBtn" disabled>⚡ Execute</button>
+</div>
+
+<!-- React Flow Canvas -->
+<div class="canvas-wrap">
+    <div id="flow-root"></div>
+</div>
+
+<!-- Health Log -->
+<div class="health-log" id="healthLog">⏳ waiting for log…</div>
+
+<!-- ===== VANILLA JS: polling ===== -->
 <script>
 (function() {
-    const API_BASE = '';
+    const dot = document.getElementById('dot');
+    const lbl = document.getElementById('statusLabel');
+    const svMaster = document.getElementById('svMaster');
+    const svRam    = document.getElementById('svRam');
+    const svUptime = document.getElementById('svUptime');
+    const logEl    = document.getElementById('healthLog');
 
-    // --- DOM refs ---
-    const healthDot    = document.getElementById('healthDot');
-    const healthLabel  = document.getElementById('healthLabel');
-    const healthRam    = document.getElementById('healthRam');
-    const statMaster   = document.getElementById('statMaster');
-    const statBotsCount= document.getElementById('statBotsCount');
-    const statBotsTotal= document.getElementById('statBotsTotal');
-    const statRam      = document.getElementById('statRam');
-    const statUptime   = document.getElementById('statUptime');
-    const statBotsCard = document.getElementById('statBotsCard');
-    const osintResult  = document.getElementById('osintResult');
-    const osintTool    = document.getElementById('osintTool');
-    const osintTarget  = document.getElementById('osintTarget');
-    const osintRunBtn  = document.getElementById('osintRunBtn');
-    const osintClearBtn= document.getElementById('osintClearBtn');
-
-    let lastStatus = {};
-
-    // --- Poll /api/status every 5s ---
-    async function pollStatus() {
+    async function poll() {
         try {
-            const res = await fetch(API_BASE + '/api/status');
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const st = await res.json();
-            lastStatus = st;
-            renderStatus(st);
+            const r = await fetch('/api/status');
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const st = await r.json();
+            const ok = st.system_health === 'healthy' || st.master_online === true;
+            dot.className = ok ? 'dot ok' : 'dot bad';
+            lbl.textContent = ok ? 'ONLINE' : 'DEGRADED';
+            lbl.style.color = ok ? 'var(--green)' : 'var(--red)';
+            svMaster.textContent = st.master_online ? 'ON' : 'OFF';
+            svMaster.className = 'val ' + (st.master_online ? 'online' : 'offline');
+            svRam.textContent = st.ram_free_gb ? st.ram_free_gb.toFixed(1)+'G' : '—';
+            svUptime.textContent = st.uptime || '—';
         } catch(e) {
-            healthDot.className = 'health-dot bad';
-            healthLabel.textContent = 'Disconnected';
-            healthRam.textContent = '';
-            statMaster.textContent = '● OFFLINE';
-            statMaster.style.color = 'var(--red)';
+            dot.className = 'dot bad'; lbl.textContent = 'DISCONNECTED'; lbl.style.color = 'var(--red)';
+            svMaster.textContent = 'OFF'; svMaster.className = 'val offline';
         }
     }
-
-    function renderStatus(st) {
-        // --- Health badge ---
-        const overall = st.system_health === 'healthy';
-        healthDot.className = overall ? 'health-dot ok' : 'health-dot bad';
-        healthLabel.textContent = overall ? 'System OK' : 'Degraded';
-        healthRam.textContent = st.ram_free_gb ? `· ${st.ram_free_gb} GB free` : '';
-
-        // --- Stats ---
-        statMaster.textContent = '● ' + (st.master_online ? 'ONLINE' : 'OFFLINE');
-        statMaster.style.color = st.master_online ? 'var(--green)' : 'var(--red)';
-
-        const bots = st.bots || {};
-        const botKeys = Object.keys(bots);
-        const onlineBots = botKeys.filter(k => bots[k] === true || bots[k] === 'ONLINE' || bots[k] === 'online');
-        statBotsCount.textContent = onlineBots.length;
-        statBotsTotal.textContent = botKeys.length;
-
-        statRam.textContent = st.ram_free_gb ? st.ram_free_gb + ' GB' : '—';
-        statUptime.textContent = st.uptime || '—';
+    async function pollLog() {
+        try { const r = await fetch('/api/health-log'); if (!r.ok) return; const d = await r.json(); if (d.entries && d.entries.length > 0) logEl.textContent = d.entries[d.entries.length-1]; } catch(e) {}
     }
-
-    // --- OSINT execute ---
-    async function runOsint() {
-        const tool   = osintTool.value;   // 'phone' | 'email'
-        const target = osintTarget.value.trim();
-        if (!target) { osintResult.textContent = '⚠️ Please enter a target.'; return; }
-
-        osintResult.textContent = '⏳ Scanning…';
-        osintRunBtn.disabled = true;
-        try {
-            const res = await fetch(API_BASE + '/api/osint', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tool, target })
-            });
-            const data = await res.json();
-            osintResult.textContent = JSON.stringify(data, null, 2);
-        } catch(e) {
-            osintResult.textContent = '❌ Error: ' + e.message;
-        } finally {
-            osintRunBtn.disabled = false;
-        }
-    }
-
-    osintRunBtn.addEventListener('click', runOsint);
-    osintClearBtn.addEventListener('click', () => {
-        osintResult.textContent = '⏎ results will appear here…';
-        osintTarget.value = '';
-    });
-    osintTarget.addEventListener('keydown', e => { if (e.key === 'Enter') runOsint(); });
-
-    // --- Start polling ---
-    pollStatus();
-    setInterval(pollStatus, 5000);
+    poll(); pollLog();
+    setInterval(poll, 5000); setInterval(pollLog, 10000);
 })();
 </script>
 
-<!-- ===== REACT FLOW (Babel) ===== -->
+<!-- ===== REACT FLOW with SKILL FORGE ===== -->
 <script type="text/babel">
-const { useState, useEffect, useCallback } = React;
-const ReactFlow   = window.ReactFlow.default;
-const Background  = window.ReactFlowBackground.default;
-const Controls    = window.ReactFlowControls.default;
+const { useState, useEffect, useCallback, useRef } = React;
+const RF         = window.ReactFlow.default || window.ReactFlow;
+const ReactFlowC = RF.default || RF;
+const Background = (window.ReactFlowBackground && window.ReactFlowBackground.default) || window.ReactFlowBackground;
+const Controls   = (window.ReactFlowControls && window.ReactFlowControls.default) || window.ReactFlowControls;
+const useEdgesState = RF.useEdgesState || ReactFlowC.useEdgesState;
+const useNodesState = RF.useNodesState || ReactFlowC.useNodesState;
+const addEdge       = RF.addEdge || ReactFlowC.addEdge;
 
-/* ---- Bot definitions (dynamic from /api/status) ---- */
-const STATIC_BOTS = {
-    'aura_master': { id: 'm1', label: '◈ AURA_MASTER', x: 300, y: 0, isMaster: true },
-    'crypto_farmer': { id: 'b1', label: '⛏️ crypto_farmer', x: 100, y: 180 },
-    'discord_bot':   { id: 'b2', label: '💬 discord_bot',   x: 300, y: 180 },
-    'escudo_monitor':{ id: 'b3', label: '🛡️ escudo_monitor',x: 500, y: 180 },
-    'recon_agent':   { id: 'b4', label: '🔍 recon_agent',   x: 200, y: 320 },
-    'osint_engine':  { id: 'b5', label: '🧪 osint_engine',  x: 400, y: 320 },
-};
+/* ── NODE DEFINITIONS (8 tools + 1 master) ── */
+const ALL_NODES = [
+    { id: 'master',   label: '◈ AURA MASTER',        x: 300, y: 0,   type: 'core',      color: '#8b5cf6', isMaster: true },
+    { id: 'ollama',   label: '🧠 Ollama LLM',         x: 100, y: 160, type: 'core',      color: '#10b981' },
+    { id: 'osint',    label: '🔍 OSINT Engine',       x: 300, y: 160, type: 'intel',     color: '#3b82f6' },
+    { id: 'termux',   label: '📱 Termux Sync',        x: 500, y: 160, type: 'automation',color: '#f59e0b' },
+    { id: 'subdomain',label: '🌐 Subdomain Enum',     x: 0,   y: 300, type: 'recon',     color: '#22c55e' },
+    { id: 'exiftool', label: '📸 ExifTool',           x: 200, y: 300, type: 'forensic',  color: '#ec4899' },
+    { id: 'blackbird',label: '🐦 Blackbird/Nexfil',   x: 400, y: 300, type: 'recon',     color: '#f97316' },
+    { id: 'photon',   label: '🌐 Photon Crawler',     x: 600, y: 300, type: 'scraper',   color: '#14b8a6' },
+];
 
-/* Build edges: all children point to master */
-function buildEdges() {
-    const e = [];
-    Object.values(STATIC_BOTS).forEach(bot => {
-        if (!bot.isMaster) {
-            e.push({ id: 'e-' + bot.id, source: 'm1', target: bot.id, animated: true, style: { stroke: '#3b82f6', strokeWidth: 2 } });
-        }
-    });
-    return e;
+/* ── Combined Flow definitions (Skill Forge, 8 flujos) ── */
+const COMBINED_FLOWS = [
+    { triggers: ['blackbird','osint'],    label: 'username-to-phone',  desc: 'Find user → Lookup phone' },
+    { triggers: ['blackbird','photon'],   label: 'username-to-domain', desc: 'Find user → Crawl profiles' },
+    { triggers: ['photon','exiftool'],    label: 'domain-images',      desc: 'Crawl domain → Extract EXIF' },
+    { triggers: ['exiftool','osint'],     label: 'image-to-number',    desc: 'Image EXIF → Extract phone/email' },
+    { triggers: ['subdomain','photon'],   label: 'subs-to-crawl',      desc: 'Enumerate subdomains → Crawl each' },
+    { triggers: ['subdomain','osint'],    label: 'subs-to-osint',      desc: 'Find subdomains → OSINT on each' },
+    { triggers: ['subdomain','blackbird'],label: 'subs-to-usernames',  desc: 'Enumerate subs → Find users on them' },
+    { triggers: ['termux','subdomain'],   label: 'remote-sub-enum',    desc: 'Remote shell → Enumerate subdomains' },
+];
+
+/* ── Detect combined flow from edges ── */
+function detectCombinedFlow(edges) {
+    const connected = new Set();
+    edges.forEach(e => { connected.add(e.source); connected.add(e.target); });
+
+    for (const flow of COMBINED_FLOWS) {
+        const [a, b] = flow.triggers;
+        const match = edges.some(e =>
+            (e.source === a && e.target === b) || (e.source === b && e.target === a)
+        );
+        if (match) return flow;
+    }
+    return null;
 }
 
-const INITIAL_EDGES = buildEdges();
+/* ── Main Component ── */
+function AuraForge() {
+    const [nodes, setNodes, onNodesChange] = useNodesState([]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+    const [activeFlow, setActiveFlow] = useState(null);
+    const [combinedFlows, setCombinedFlows] = useState([]);
+    const forgeBtnRef = useRef(null);
 
-function AuraFlow() {
-    const [nodes, setNodes] = useState([]);
-
+    // ── Poll status from backend ──
     const fetchStatus = useCallback(async () => {
         try {
-            const res = await fetch('/api/status');
-            const st = await res.json();
+            const r = await fetch('/api/status');
+            if (!r.ok) throw new Error('fail');
+            const st = await r.json();
             const bots = st.bots || {};
 
-            setNodes(Object.values(STATIC_BOTS).map(cfg => {
-                // Determine status
+            setNodes(ALL_NODES.map(cfg => {
                 let online = false;
-                if (cfg.isMaster) {
-                    online = st.master_online === true;
-                } else {
-                    // map label key to st.bots key
-                    const key = Object.keys(bots).find(k => cfg.label.toLowerCase().includes(k.toLowerCase())) || cfg.id;
-                    online = bots[key] === true || bots[key] === 'ONLINE' || bots[key] === 'online';
+                if (cfg.isMaster) online = st.master_online === true;
+                else {
+                    const key = Object.keys(bots).find(k => cfg.id.includes(k) || k.includes(cfg.id));
+                    online = key ? (bots[key] === true || bots[key] === 'ONLINE') : false;
                 }
-
-                const bgColor = online ? '#2d4a3a' : '#3d1f2a';
-                const borderColor = online ? '#deff9a' : '#ef4444';
-                const nodeColor = online ? '#deff9a' : '#ef4444';
+                const bg     = online ? '#1a3a2a' : '#2a1520';
+                const border = online ? '#deff9a' : '#ef4444';
+                const color  = online ? '#deff9a' : '#ef4444';
 
                 return {
                     id: cfg.id,
+                    position: { x: cfg.x, y: cfg.y },
                     data: {
                         label: (
                             <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
-                                <span style={{ fontSize:12 }}>{cfg.label}</span>
-                                <span style={{ fontSize:10, color: nodeColor, fontWeight:700 }}>
-                                    {online ? '● ACTIVE' : '○ OFFLINE'}
+                                <span style={{ fontSize: 12, fontWeight: 600 }}>{cfg.label}</span>
+                                <span style={{ fontSize: 9, color, fontWeight: 700 }}>
+                                    {online ? '● ACTIVO' : '○ OFFLINE'}
                                 </span>
                             </div>
                         )
                     },
-                    position: { x: cfg.x, y: cfg.y },
                     style: {
-                        background: bgColor,
-                        color: '#e2e8f0',
-                        border: `2px solid ${borderColor}`,
-                        borderRadius: '12px',
-                        fontWeight: 600,
-                        width: 150,
-                        textAlign: 'center',
-                        padding: '8px 4px',
-                        fontSize: 13,
-                        boxShadow: online ? '0 0 12px rgba(222,255,154,0.25)' : 'none'
-                    }
+                        background: bg, color: '#e2e8f0',
+                        border: `2px solid ${border}`, borderRadius: 12,
+                        fontWeight: 600, width: 150, textAlign: 'center',
+                        padding: '8px 4px', fontSize: 12,
+                        boxShadow: online ? '0 0 12px rgba(222,255,154,0.2)' : 'none'
+                    },
+                    draggable: false,
                 };
             }));
-        } catch(e) { console.error('Flow poll error', e); }
+        } catch(e) { /* silent */ }
     }, []);
 
     useEffect(() => {
@@ -487,37 +243,139 @@ function AuraFlow() {
         return () => clearInterval(iv);
     }, [fetchStatus]);
 
-    const onNodeClick = useCallback(async (evt, node) => {
-        // Toggle: find which bot key this node corresponds to
-        const entry = Object.entries(STATIC_BOTS).find(([,v]) => v.id === node.id);
-        if (!entry) return;
-        const botKey = entry[0];
-        try {
-            const st = await fetch('/api/status').then(r => r.json());
-            const bots = st.bots || {};
-            const isOnline = bots[botKey] === true || bots[botKey] === 'ONLINE' || bots[botKey] === 'online';
-            const action = isOnline ? 'stop' : 'start';
-            await fetch(`/${action}/${botKey}`);
-            fetchStatus();
-        } catch(e) { console.error('Toggle error', e); }
-    }, [fetchStatus]);
+    // ── Default edges (master → all tools) ──
+    const defaultEdges = ALL_NODES.filter(n => !n.isMaster).map(n => ({
+        id: `e-m-${n.id}`,
+        source: 'master',
+        target: n.id,
+        animated: true,
+        style: { stroke: '#3b82f6', strokeWidth: 1.5, opacity: 0.5 },
+    }));
+
+    // ── Handle new connections (Skill Forge) ──
+    const onConnect = useCallback((params) => {
+        if (params.target === 'master') return;
+
+        setEdges(eds => {
+            const newEdges = addEdge({
+                ...params,
+                animated: true,
+                style: { stroke: '#8b5cf6', strokeWidth: 2.5 },
+                label: '⚔️'
+            }, eds);
+
+            const flow = detectCombinedFlow(newEdges);
+            const existing = document.getElementById('forgeStatus');
+            const btn = document.getElementById('forgeBtn');
+            if (existing) {
+                if (flow) {
+                    existing.textContent = `🔗 ${flow.label}: ${flow.desc}`;
+                    existing.style.color = 'var(--green)';
+                    btn.disabled = false;
+                    btn.textContent = `⚡ Execute ${flow.label}`;
+                    btn.dataset.flow = flow.label;
+                } else {
+                    existing.textContent = `⚔️ Custom connection (${params.source} → ${params.target}) — no combined flow detected`;
+                    existing.style.color = 'var(--text)';
+                    btn.disabled = false;
+                    btn.textContent = `⚡ Run: ${params.source}+${params.target}`;
+                    btn.dataset.flow = 'custom';
+                }
+            }
+            window.__flowData = { edges: newEdges, flow };
+            return newEdges;
+        });
+    }, [setEdges, defaultEdges]);
+
+    // ── Execute button handler ──
+    useEffect(() => {
+        const btn = document.getElementById('forgeBtn');
+        if (!btn) return;
+        btn.onclick = async () => {
+            const flowLabel = btn.dataset.flow || 'custom';
+            btn.textContent = '⏳ Running…';
+            btn.disabled = true;
+
+            const defaultMasterIds = new Set(ALL_NODES.filter(n => !n.isMaster).map(n => n.id));
+            const userEdges = edges.filter(e => e.style && e.style.strokeWidth > 2);
+            const connectedTools = new Set();
+            userEdges.forEach(e => { connectedTools.add(e.source); connectedTools.add(e.target); });
+            connectedTools.delete('master');
+            const skillsChain = Array.from(connectedTools);
+
+            const payload = {
+                action: 'execute_flow',
+                flow: flowLabel,
+                skills: skillsChain,
+                edges: edges.map(e => ({ source: e.source, target: e.target })),
+                combined_flow: window.__flowData?.flow || null,
+                target: ''
+            };
+
+            try {
+                const resp = await fetch('/api/skill-forge', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const result = await resp.json();
+                const statusEl = document.getElementById('forgeStatus');
+                if (result.status === 'completed' || (result.results && result.results.pipeline)) {
+                    btn.textContent = `✅ Done (${result.status || 'ok'})`;
+                    if (statusEl) {
+                        statusEl.textContent = `✅ Chain executed: ${skillsChain.join(' → ') || 'ok'}`;
+                        statusEl.style.color = 'var(--green)';
+                    }
+                } else {
+                    btn.textContent = `⚠️ Partial (${result.status || '?'})`;
+                    if (statusEl) {
+                        statusEl.textContent = `⚠️ ${result.error || 'Chain failed'}`;
+                        statusEl.style.color = 'var(--red)';
+                    }
+                }
+                setTimeout(() => {
+                    btn.textContent = `⚡ Execute ${flowLabel}`;
+                    btn.disabled = false;
+                }, 4000);
+            } catch(e) {
+                btn.textContent = '❌ Error';
+                setTimeout(() => {
+                    btn.textContent = '⚡ Execute';
+                    btn.disabled = false;
+                }, 4000);
+            }
+        };
+    }, [edges]);
+
+    // ── Initial edges (master defaults) ──
+    useEffect(() => {
+        setEdges(defaultEdges);
+    }, []);
 
     return (
         <ReactFlow
             nodes={nodes}
-            edges={INITIAL_EDGES}
-            onNodeClick={onNodeClick}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
             fitView
             attributionPosition="bottom-left"
+            nodesDraggable={false}
+            nodesConnectable={true}
+            elementsSelectable={true}
+            panOnDrag={true}
+            zoomOnScroll={true}
+            connectionLineStyle={{ stroke: '#8b5cf6', strokeWidth: 3 }}
         >
             <Background color="#1e2d45" gap={20} />
-            <Controls />
+            <Controls showInteractive={false} />
         </ReactFlow>
     );
 }
 
 const root = ReactDOM.createRoot(document.getElementById('flow-root'));
-root.render(<AuraFlow />);
+root.render(<AuraForge />);
 </script>
 </body>
 </html>

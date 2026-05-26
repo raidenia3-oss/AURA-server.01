@@ -1,0 +1,11 @@
+{
+  "builds": [
+    { "src": "AME_Core/dashboard.html", "use": "@vercel/static" },
+    { "src": "AME_Core/templates/*.html", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/", "dest": "/AME_Core/dashboard.html" },
+    { "src": "/blue", "dest": "/AME_Core/templates/blue_dashboard.html" },
+    { "src": "/(.*)", "dest": "/AME_Core/$1" }
+  ]
+}

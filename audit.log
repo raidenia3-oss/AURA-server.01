@@ -1,0 +1,17 @@
+🔑 AURA Perimetral Check — Diagnóstico de Conectividad
+============================================================
+Timestamp: 2026-05-26T16:37:14
+Total providers: 5
+
+  ✅ openrouter
+     Model: openai/gpt-3.5-turbo
+  ✅ groq
+     Model: mixtral-8x7b-32768
+  ✅ gemini
+     Model: gemini-pro
+  ✅ mistral
+     Model: mistral-7b-instruct-v0.2
+  ✅ cerebras
+     Model: cerebras-7b
+
+📊 Status: OK
