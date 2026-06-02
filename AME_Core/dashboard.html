@@ -1,381 +1,418 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>AURA · Forja de Habilidades</title>
-
-    <!-- CDNs React Flow UMD -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@reactflow/core@11.10.1/dist/umd/index.js"></script>
-    <script src="https://unpkg.com/@reactflow/background@11.10.1/dist/umd/index.js"></script>
-    <script src="https://unpkg.com/@reactflow/controls@11.10.1/dist/umd/index.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-
-        :root {
-            --bg: #0a0f1e; --card: #111827; --border: #1f2937;
-            --text: #f1f5f9; --text-dim: #6b7280;
-            --green: #deff9a; --red: #ef4444; --blue: #3b82f6; --accent: #8b5cf6;
-        }
-
-        body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace; font-size: 14px; overflow-x: hidden; }
-
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
-        .header h1 { font-size: 1rem; font-weight: 700; }
-        .header h1 span { color: var(--accent); }
-        .health-tag { display: flex; align-items: center; gap: 5px; font-size: 0.7rem; padding: 3px 8px; border-radius: 20px; background: var(--bg); border: 1px solid var(--border); }
-        .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
-        .dot.ok  { background: var(--green); box-shadow: 0 0 5px var(--green); }
-        .dot.bad { background: var(--red);   box-shadow: 0 0 5px var(--red); }
-
-        .stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; padding: 8px 14px; background: var(--card); border-bottom: 1px solid var(--border); }
-        .stat-item { text-align: center; }
-        .stat-item .val { font-size: 1.2rem; font-weight: 700; }
-        .stat-item .lbl { font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; }
-        .val.online { color: var(--green); } .val.offline { color: var(--red); }
-
-        /* ── Skill Forge section ── */
-        .forge-bar {
-            display: flex; align-items: center; justify-content: space-between;
-            gap: 8px; padding: 6px 14px;
-            background: var(--card); border-bottom: 1px solid var(--border);
-            font-size: 0.75rem;
-        }
-        .forge-bar .forge-label { color: var(--accent); font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
-        .forge-bar .forge-status { color: var(--text-dim); flex: 1; }
-        .forge-bar .forge-btn {
-            background: var(--accent); color: #fff; border: none;
-            border-radius: 6px; padding: 4px 12px; font-size: 0.7rem;
-            font-weight: 600; cursor: pointer; transition: 0.15s;
-        }
-        .forge-bar .forge-btn:hover { filter: brightness(1.2); }
-        .forge-bar .forge-btn:disabled { opacity: 0.4; cursor: default; }
-
-        /* ── Canvas ── */
-        .canvas-wrap { width: 100%; height: calc(100vh - 195px); min-height: 300px; background: #060b16; position: relative; }
-        #flow-root { width: 100%; height: 100%; }
-
-        /* ── Bottom health log ── */
-        .health-log { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(6,11,22,0.95); border-top: 1px solid var(--border); padding: 5px 10px; font-size: 0.55rem; color: var(--text-dim); font-family: monospace; max-height: 32px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; z-index: 20; }
-
-        @media (max-width: 480px) {
-            .header h1 { font-size: 0.9rem; }
-            .stats-row { grid-template-columns: repeat(2,1fr); }
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <meta name="theme-color" content="#121212" />
+  <title>AURA — Dashboard</title>
+  <link rel="stylesheet" href="static/css/style.css">
+  <link rel="stylesheet" href="static/css/tactical_dashboard.css">
+  <link rel="stylesheet" href="static/css/streaming_chat.css">
+  <link rel="stylesheet" href="static/css/chat_history.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    :root{--bg:#0b0b0b;--muted:#9aa0a6;--accent:#ff9800}
+    body{margin:0;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:#eee}
+    .status-bar{position:fixed;top:8px;left:8px;right:8px;display:flex;gap:8px;align-items:center;z-index:999}
+    .status-item{background:rgba(255,255,255,0.03);padding:6px 10px;border-radius:12px;font-size:13px;display:flex;gap:8px;align-items:center}
+    .battery {width:40px;height:12px;border:1px solid #333;border-radius:3px;overflow:hidden;background:#111}
+    .battery-fill{height:100%;width:0;background:var(--accent);transition:width .25s}
+    .signal-bars{display:flex;gap:2px}
+    .signal-bars span{width:6px;background:#4caf50;height:6px;border-radius:2px;display:block;opacity:.6}
+    .signal-bars span.t0{height:6px;opacity:.25;background:#f44336}
+    .offline-queue{display:flex;gap:6px;align-items:center}
+    .low-power{display:none;background:rgba(255,152,0,0.12);color:var(--accent);padding:6px;border-radius:10px}
+    .low-power.active{display:inline-flex}
+    main{padding:64px 16px 16px}
+    .overlay-offline{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;place-items:center;z-index:1000;flex-direction:column}
+    .overlay-offline.show{display:flex}
+    .btn{background:var(--accent);color:#111;padding:10px 14px;border-radius:8px;border:0;cursor:pointer}
+    small{color:var(--muted)}
+    .biometric-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 2000;
+      flex-direction: column;
+    }
+    .biometric-content {
+      text-align: center;
+      padding: 20px;
+      background: rgba(0, 0, 0, 0.7);
+      border-radius: 10px;
+    }
+    .biometric-content h3 {
+      color: white;
+      margin-bottom: 15px;
+    }
+    .biometric-content p {
+      color: #ccc;
+      margin-bottom: 20px;
+    }
+    .biometric-icon {
+      width: 60px;
+      height: 60px;
+      margin: 0 auto 20px;
+    }
+    .notification-test-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background-color: #ff5722;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 5px;
+      cursor: pointer;
+      z-index: 1000;
+      font-size: 14px;
+    }
+  </style>
 </head>
 <body>
+  <div class="status-bar" aria-hidden="false">
+    <div class="status-item" id="connectionStatus">Estado: <strong id="connText">—</strong></div>
+    <div class="status-item">Batería: <div class="battery" aria-hidden="true"><div id="batteryFill" class="battery-fill"></div></div> <small id="batteryText"></small></div>
+    <div class="status-item signal">Señal: <div class="signal-bars" id="signalBars"><span></span><span></span><span></span><span></span></div></div>
+    <div class="status-item offline-queue" id="queueIndicator" style="display:none">Cola offline: <span id="queueCount">0</span></div>
+    <div class="status-item low-power" id="lowPowerBadge">Modo bajo consumo</div>
+  </div>
 
-<!-- Header -->
-<div class="header">
-    <h1>⚒️ <span>AURA</span> Forja</h1>
-    <div class="health-tag"><span class="dot" id="dot"></span><span id="statusLabel">CONNECTING…</span></div>
-</div>
+  <main>
+    <h1>AURA — Dashboard</h1>
+    <p>Interfaz móvil optimizada. El protocolo móvil usa cola offline ligera, detección de red y ahorro de energía.</p>
 
-<!-- Stats -->
-<div class="stats-row" id="stats">
-    <div class="stat-item"><div class="val" id="svMaster">—</div><div class="lbl">Master</div></div>
-    <div class="stat-item"><div class="val" id="svRam">—</div><div class="lbl">RAM</div></div>
-    <div class="stat-item"><div class="val" id="svUptime">—</div><div class="lbl">Uptime</div></div>
-</div>
+    <section>
+      <button class="btn" id="sendTest">Enviar prueba (cola si está offline)</button>
+      <button class="btn" id="flushQueue" style="background:#4caf50">Forzar envío cola</button>
+      <p><small id="lastAction">Sin acciones todavía</small></p>
+    </section>
 
-<!-- Skill Forge Bar -->
-<div class="forge-bar" id="forgeBar">
-    <span class="forge-label">🔨 Skill Forge</span>
-    <span class="forge-status" id="forgeStatus">Connect two tool-nodes to create a Combined Flow</span>
-    <button class="forge-btn" id="forgeBtn" disabled>⚡ Execute</button>
-</div>
+    <!-- === SHARE TARGET STATUS === -->
+    <section id="shareTargetSection" style="margin-top:20px;border-top:1px solid #222;padding-top:16px;">
+      <h3 style="display:flex;align-items:center;gap:8px;">
+        📤 Compartir Archivos
+        <span id="shareQueueIndicator" style="display:none;font-size:13px;background:rgba(255,152,0,0.15);padding:2px 8px;border-radius:10px;color:#ff9800;">
+          Cola: <span id="shareQueueCount">0</span>
+        </span>
+      </h3>
+      <p><small>Comparte un PDF, TXT o imagen desde cualquier app de Android a AURA para analizarlo.</small></p>
+      <div id="shareStatus" style="display:none;padding:10px 14px;background:rgba(76,175,80,0.1);border-radius:8px;border-left:3px solid #4caf50;margin-bottom:8px;">
+        ⏳ Procesando...
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <span style="background:rgba(255,87,34,0.12);color:#ff5722;padding:4px 10px;border-radius:6px;font-size:12px;">📄 PDF</span>
+        <span style="background:rgba(33,150,243,0.12);color:#2196f3;padding:4px 10px;border-radius:6px;font-size:12px;">📝 TXT</span>
+        <span style="background:rgba(76,175,80,0.12);color:#4caf50;padding:4px 10px;border-radius:6px;font-size:12px;">🖼️ JPG/PNG</span>
+      </div>
+      <button class="btn" id="flushShareBtn" style="background:#ff9800;margin-top:12px;">Reintentar archivos pendientes</button>
+    </section>
+  </main>
 
-<!-- React Flow Canvas -->
-<div class="canvas-wrap">
-    <div id="flow-root"></div>
-</div>
+  <div class="overlay-offline" id="offlineOverlay" role="dialog" aria-modal="true">
+    <h2>Sin conexión</h2>
+    <p>Almacenar acciones localmente y sincronizar cuando vuelva la conexión.</p>
+    <button class="btn" id="retryBtn">Reintentar ahora</button>
+  </div>
 
-<!-- Health Log -->
-<div class="health-log" id="healthLog">⏳ waiting for log…</div>
+  <div class="biometric-overlay" id="biometricOverlay" style="display: none;">
+    <div class="biometric-content">
+      <h3>Autenticación Biométrica</h3>
+      <p id="biometricMessage">Coloque su dedo en el sensor...</p>
+      <svg class="biometric-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 12C14.7614 12 17 9.76144 17 7C17 4.23858 14.7614 2 12 2C9.23858 2 7 4.23858 7 7C7 9.76144 9.23858 12 12 12Z" fill="white"/>
+        <path d="M12 14C14.2091 14 16 12.2091 16 10C16 7.79086 14.2091 6 12 6C9.79086 6 8 7.79086 8 10C8 12.2091 9.79086 14 12 14Z" fill="white"/>
+        <path d="M12 18C14.7614 18 17 15.7614 17 13C17 10.2386 14.7614 8 12 8C9.23858 8 7 10.2386 7 13C7 15.7614 9.23858 18 12 18Z" fill="white"/>
+      </svg>
+    </div>
+  </div>
 
-<!-- ===== VANILLA JS: polling ===== -->
-<script>
-(function() {
-    const dot = document.getElementById('dot');
-    const lbl = document.getElementById('statusLabel');
-    const svMaster = document.getElementById('svMaster');
-    const svRam    = document.getElementById('svRam');
-    const svUptime = document.getElementById('svUptime');
-    const logEl    = document.getElementById('healthLog');
+  <!-- Botón de prueba de notificaciones -->
+  <button class="notification-test-btn" id="testNotificationBtn">Prueba Notificación</button>
 
-    async function poll() {
-        try {
-            const r = await fetch('/api/status');
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            const st = await r.json();
-            const ok = st.system_health === 'healthy' || st.master_online === true;
-            dot.className = ok ? 'dot ok' : 'dot bad';
-            lbl.textContent = ok ? 'ONLINE' : 'DEGRADED';
-            lbl.style.color = ok ? 'var(--green)' : 'var(--red)';
-            svMaster.textContent = st.master_online ? 'ON' : 'OFF';
-            svMaster.className = 'val ' + (st.master_online ? 'online' : 'offline');
-            svRam.textContent = st.ram_free_gb ? st.ram_free_gb.toFixed(1)+'G' : '—';
-            svUptime.textContent = st.uptime || '—';
-        } catch(e) {
-            dot.className = 'dot bad'; lbl.textContent = 'DISCONNECTED'; lbl.style.color = 'var(--red)';
-            svMaster.textContent = 'OFF'; svMaster.className = 'val offline';
-        }
+  <!-- ===== SHARE TARGET FILE HANDLER ===== -->
+  <script src="static/js/file_handler.js"></script>
+  <script src="static/js/biometricAuth.js"></script>
+  <script src="static/js/chat_history.js"></script>
+  <script src="static/js/streaming_chat.js"></script>
+  <script src="static/js/background_notifications.js"></script>
+  <script src="static/js/action_queue_manager.js"></script>
+  <script src="static/js/telemetry_dashboard.js"></script>
+  <script src="static/js/tactical_dashboard.js"></script>
+
+  <script>
+    // Botón de prueba de notificaciones
+    document.getElementById('testNotificationBtn').addEventListener('click', async () => {
+      if (window.AURA_BackgroundNotifications) {
+        await window.AURA_BackgroundNotifications.sendTestNotification();
+      } else {
+        alert('El módulo de notificaciones no está disponible.');
+      }
+    });
+
+    // Mobile Field Protocol — cliente ligero
+    const queueKey = 'aura_offline_queue_v1';
+    const apiEndpoint = '/api/mobile-protocol'; // ajustar servidor según despliegue
+
+    // Biometric Auth
+    const biometricAuth = new BiometricAuth();
+    let authToken = null;
+
+    const el = {
+      connText: document.getElementById('connText'),
+      batteryFill: document.getElementById('batteryFill'),
+      batteryText: document.getElementById('batteryText'),
+      signalBars: document.getElementById('signalBars'),
+      queueIndicator: document.getElementById('queueIndicator'),
+      queueCount: document.getElementById('queueCount'),
+      lowPowerBadge: document.getElementById('lowPowerBadge'),
+      offlineOverlay: document.getElementById('offlineOverlay'),
+      lastAction: document.getElementById('lastAction'),
+      sendTest: document.getElementById('sendTest'),
+      flushQueue: document.getElementById('flushQueue'),
+      retryBtn: document.getElementById('retryBtn'),
+      biometricOverlay: document.getElementById('biometricOverlay'),
+      biometricMessage: document.getElementById('biometricMessage')
+    };
+
+    function readQueue() {
+      try {
+        return JSON.parse(localStorage.getItem(queueKey) || '[]');
+      } catch (e) {
+        return [];
+      }
     }
-    async function pollLog() {
-        try { const r = await fetch('/api/health-log'); if (!r.ok) return; const d = await r.json(); if (d.entries && d.entries.length > 0) logEl.textContent = d.entries[d.entries.length-1]; } catch(e) {}
+
+    function writeQueue(q) {
+      localStorage.setItem(queueKey, JSON.stringify(q));
+      updateQueueUI();
     }
-    poll(); pollLog();
-    setInterval(poll, 5000); setInterval(pollLog, 10000);
-})();
-</script>
 
-<!-- ===== REACT FLOW with SKILL FORGE ===== -->
-<script type="text/babel">
-const { useState, useEffect, useCallback, useRef } = React;
-const RF         = window.ReactFlow.default || window.ReactFlow;
-const ReactFlowC = RF.default || RF;
-const Background = (window.ReactFlowBackground && window.ReactFlowBackground.default) || window.ReactFlowBackground;
-const Controls   = (window.ReactFlowControls && window.ReactFlowControls.default) || window.ReactFlowControls;
-const useEdgesState = RF.useEdgesState || ReactFlowC.useEdgesState;
-const useNodesState = RF.useNodesState || ReactFlowC.useNodesState;
-const addEdge       = RF.addEdge || ReactFlowC.addEdge;
-
-/* ── NODE DEFINITIONS (8 tools + 1 master) ── */
-const ALL_NODES = [
-    { id: 'master',   label: '◈ AURA MASTER',        x: 300, y: 0,   type: 'core',      color: '#8b5cf6', isMaster: true },
-    { id: 'ollama',   label: '🧠 Ollama LLM',         x: 100, y: 160, type: 'core',      color: '#10b981' },
-    { id: 'osint',    label: '🔍 OSINT Engine',       x: 300, y: 160, type: 'intel',     color: '#3b82f6' },
-    { id: 'termux',   label: '📱 Termux Sync',        x: 500, y: 160, type: 'automation',color: '#f59e0b' },
-    { id: 'subdomain',label: '🌐 Subdomain Enum',     x: 0,   y: 300, type: 'recon',     color: '#22c55e' },
-    { id: 'exiftool', label: '📸 ExifTool',           x: 200, y: 300, type: 'forensic',  color: '#ec4899' },
-    { id: 'blackbird',label: '🐦 Blackbird/Nexfil',   x: 400, y: 300, type: 'recon',     color: '#f97316' },
-    { id: 'photon',   label: '🌐 Photon Crawler',     x: 600, y: 300, type: 'scraper',   color: '#14b8a6' },
-];
-
-/* ── Combined Flow definitions (Skill Forge, 8 flujos) ── */
-const COMBINED_FLOWS = [
-    { triggers: ['blackbird','osint'],    label: 'username-to-phone',  desc: 'Find user → Lookup phone' },
-    { triggers: ['blackbird','photon'],   label: 'username-to-domain', desc: 'Find user → Crawl profiles' },
-    { triggers: ['photon','exiftool'],    label: 'domain-images',      desc: 'Crawl domain → Extract EXIF' },
-    { triggers: ['exiftool','osint'],     label: 'image-to-number',    desc: 'Image EXIF → Extract phone/email' },
-    { triggers: ['subdomain','photon'],   label: 'subs-to-crawl',      desc: 'Enumerate subdomains → Crawl each' },
-    { triggers: ['subdomain','osint'],    label: 'subs-to-osint',      desc: 'Find subdomains → OSINT on each' },
-    { triggers: ['subdomain','blackbird'],label: 'subs-to-usernames',  desc: 'Enumerate subs → Find users on them' },
-    { triggers: ['termux','subdomain'],   label: 'remote-sub-enum',    desc: 'Remote shell → Enumerate subdomains' },
-];
-
-/* ── Detect combined flow from edges ── */
-function detectCombinedFlow(edges) {
-    const connected = new Set();
-    edges.forEach(e => { connected.add(e.source); connected.add(e.target); });
-
-    for (const flow of COMBINED_FLOWS) {
-        const [a, b] = flow.triggers;
-        const match = edges.some(e =>
-            (e.source === a && e.target === b) || (e.source === b && e.target === a)
-        );
-        if (match) return flow;
+    function enqueue(item) {
+      const q = readQueue();
+      q.push(item);
+      writeQueue(q);
+      el.lastAction.textContent = 'Acción encolada';
     }
-    return null;
-}
 
-/* ── Main Component ── */
-function AuraForge() {
-    const [nodes, setNodes, onNodesChange] = useNodesState([]);
-    const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-    const [activeFlow, setActiveFlow] = useState(null);
-    const [combinedFlows, setCombinedFlows] = useState([]);
-    const forgeBtnRef = useRef(null);
+    function clearQueue() {
+      localStorage.removeItem(queueKey);
+      updateQueueUI();
+    }
 
-    // ── Poll status from backend ──
-    const fetchStatus = useCallback(async () => {
-        try {
-            const r = await fetch('/api/status');
-            if (!r.ok) throw new Error('fail');
-            const st = await r.json();
-            const bots = st.bots || {};
+    function updateQueueUI() {
+      const q = readQueue();
+      el.queueCount.textContent = q.length;
+      el.queueIndicator.style.display = q.length ? 'flex' : 'none';
+    }
 
-            setNodes(ALL_NODES.map(cfg => {
-                let online = false;
-                if (cfg.isMaster) online = st.master_online === true;
-                else {
-                    const key = Object.keys(bots).find(k => cfg.id.includes(k) || k.includes(cfg.id));
-                    online = key ? (bots[key] === true || bots[key] === 'ONLINE') : false;
-                }
-                const bg     = online ? '#1a3a2a' : '#2a1520';
-                const border = online ? '#deff9a' : '#ef4444';
-                const color  = online ? '#deff9a' : '#ef4444';
+    async function authenticateBiometric() {
+      try {
+        el.biometricOverlay.style.display = 'flex';
+        el.biometricMessage.textContent = 'Coloque su dedo en el sensor...';
 
-                return {
-                    id: cfg.id,
-                    position: { x: cfg.x, y: cfg.y },
-                    data: {
-                        label: (
-                            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
-                                <span style={{ fontSize: 12, fontWeight: 600 }}>{cfg.label}</span>
-                                <span style={{ fontSize: 9, color, fontWeight: 700 }}>
-                                    {online ? '● ACTIVO' : '○ OFFLINE'}
-                                </span>
-                            </div>
-                        )
-                    },
-                    style: {
-                        background: bg, color: '#e2e8f0',
-                        border: `2px solid ${border}`, borderRadius: 12,
-                        fontWeight: 600, width: 150, textAlign: 'center',
-                        padding: '8px 4px', fontSize: 12,
-                        boxShadow: online ? '0 0 12px rgba(222,255,154,0.2)' : 'none'
-                    },
-                    draggable: false,
-                };
-            }));
-        } catch(e) { /* silent */ }
-    }, []);
+        const token = await biometricAuth.authenticate();
+        authToken = token;
+        biometricAuth.storeToken(token);
 
-    useEffect(() => {
-        fetchStatus();
-        const iv = setInterval(fetchStatus, 5000);
-        return () => clearInterval(iv);
-    }, [fetchStatus]);
+        el.biometricOverlay.style.display = 'none';
+        el.lastAction.textContent = 'Autenticación biométrica exitosa';
+        return true;
+      } catch (error) {
+        el.biometricMessage.textContent = 'Autenticación fallida: ' + error.message;
+        setTimeout(() => {
+          el.biometricOverlay.style.display = 'none';
+        }, 2000);
+        el.lastAction.textContent = 'Error de autenticación: ' + error.message;
+        return false;
+      }
+    }
 
-    // ── Default edges (master → all tools) ──
-    const defaultEdges = ALL_NODES.filter(n => !n.isMaster).map(n => ({
-        id: `e-m-${n.id}`,
-        source: 'master',
-        target: n.id,
-        animated: true,
-        style: { stroke: '#3b82f6', strokeWidth: 1.5, opacity: 0.5 },
-    }));
-
-    // ── Handle new connections (Skill Forge) ──
-    const onConnect = useCallback((params) => {
-        if (params.target === 'master') return;
-
-        setEdges(eds => {
-            const newEdges = addEdge({
-                ...params,
-                animated: true,
-                style: { stroke: '#8b5cf6', strokeWidth: 2.5 },
-                label: '⚔️'
-            }, eds);
-
-            const flow = detectCombinedFlow(newEdges);
-            const existing = document.getElementById('forgeStatus');
-            const btn = document.getElementById('forgeBtn');
-            if (existing) {
-                if (flow) {
-                    existing.textContent = `🔗 ${flow.label}: ${flow.desc}`;
-                    existing.style.color = 'var(--green)';
-                    btn.disabled = false;
-                    btn.textContent = `⚡ Execute ${flow.label}`;
-                    btn.dataset.flow = flow.label;
-                } else {
-                    existing.textContent = `⚔️ Custom connection (${params.source} → ${params.target}) — no combined flow detected`;
-                    existing.style.color = 'var(--text)';
-                    btn.disabled = false;
-                    btn.textContent = `⚡ Run: ${params.source}+${params.target}`;
-                    btn.dataset.flow = 'custom';
-                }
-            }
-            window.__flowData = { edges: newEdges, flow };
-            return newEdges;
-        });
-    }, [setEdges, defaultEdges]);
-
-    // ── Execute button handler ──
-    useEffect(() => {
-        const btn = document.getElementById('forgeBtn');
-        if (!btn) return;
-        btn.onclick = async () => {
-            const flowLabel = btn.dataset.flow || 'custom';
-            btn.textContent = '⏳ Running…';
-            btn.disabled = true;
-
-            const defaultMasterIds = new Set(ALL_NODES.filter(n => !n.isMaster).map(n => n.id));
-            const userEdges = edges.filter(e => e.style && e.style.strokeWidth > 2);
-            const connectedTools = new Set();
-            userEdges.forEach(e => { connectedTools.add(e.source); connectedTools.add(e.target); });
-            connectedTools.delete('master');
-            const skillsChain = Array.from(connectedTools);
-
-            const payload = {
-                action: 'execute_flow',
-                flow: flowLabel,
-                skills: skillsChain,
-                edges: edges.map(e => ({ source: e.source, target: e.target })),
-                combined_flow: window.__flowData?.flow || null,
-                target: ''
-            };
-
-            try {
-                const resp = await fetch('/api/skill-forge', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                });
-                const result = await resp.json();
-                const statusEl = document.getElementById('forgeStatus');
-                if (result.status === 'completed' || (result.results && result.results.pipeline)) {
-                    btn.textContent = `✅ Done (${result.status || 'ok'})`;
-                    if (statusEl) {
-                        statusEl.textContent = `✅ Chain executed: ${skillsChain.join(' → ') || 'ok'}`;
-                        statusEl.style.color = 'var(--green)';
-                    }
-                } else {
-                    btn.textContent = `⚠️ Partial (${result.status || '?'})`;
-                    if (statusEl) {
-                        statusEl.textContent = `⚠️ ${result.error || 'Chain failed'}`;
-                        statusEl.style.color = 'var(--red)';
-                    }
-                }
-                setTimeout(() => {
-                    btn.textContent = `⚡ Execute ${flowLabel}`;
-                    btn.disabled = false;
-                }, 4000);
-            } catch(e) {
-                btn.textContent = '❌ Error';
-                setTimeout(() => {
-                    btn.textContent = '⚡ Execute';
-                    btn.disabled = false;
-                }, 4000);
-            }
+    async function sendPayload(payload) {
+      try {
+        const headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
         };
-    }, [edges]);
 
-    // ── Initial edges (master defaults) ──
-    useEffect(() => {
-        setEdges(defaultEdges);
-    }, []);
+        const resp = await fetch(apiEndpoint, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(payload),
+          credentials: 'same-origin'
+        });
 
-    return (
-        <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            fitView
-            attributionPosition="bottom-left"
-            nodesDraggable={false}
-            nodesConnectable={true}
-            elementsSelectable={true}
-            panOnDrag={true}
-            zoomOnScroll={true}
-            connectionLineStyle={{ stroke: '#8b5cf6', strokeWidth: 3 }}
-        >
-            <Background color="#1e2d45" gap={20} />
-            <Controls showInteractive={false} />
-        </ReactFlow>
-    );
-}
+        if (!resp.ok) {
+          throw new Error('HTTP ' + resp.status);
+        }
 
-const root = ReactDOM.createRoot(document.getElementById('flow-root'));
-root.render(<AuraForge />);
-</script>
+        el.lastAction.textContent = 'Enviado al servidor';
+        return true;
+      } catch (err) {
+        enqueue(payload);
+        el.lastAction.textContent = 'Guardado localmente (offline)';
+        return false;
+      }
+    }
+
+    async function flushQueue() {
+      const q = readQueue();
+      if (!q.length) return;
+
+      el.lastAction.textContent = 'Sincronizando cola...';
+
+      for (let i = 0; i < q.length; i++) {
+        try {
+          const payload = q[i];
+          const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          };
+
+          const r = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(payload),
+            credentials: 'same-origin'
+          });
+
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+        } catch (e) {
+          el.lastAction.textContent = 'Sincronización parcial; reintentando cuando haya conexión';
+          return;
+        }
+      }
+
+      clearQueue();
+      el.lastAction.textContent = 'Cola sincronizada';
+    }
+
+    function updateOnlineStatus() {
+      const online = navigator.onLine;
+      el.connText.textContent = online ? 'online' : 'offline';
+
+      if (!online) {
+        el.offlineOverlay.classList.add('show');
+      } else {
+        el.offlineOverlay.classList.remove('show');
+      }
+
+      if (online) setTimeout(flushQueue, 250);
+    }
+
+    // Battery API
+    async function initBattery() {
+      if (!navigator.getBattery) return;
+      try {
+        const batt = await navigator.getBattery();
+        function render() {
+          const pct = Math.round(batt.level * 100);
+          el.batteryFill.style.width = pct + '%';
+          el.batteryText.textContent = pct + '%';
+          if (batt.level < 0.18 || (batt.charging === false && batt.level < 0.25)) {
+            el.lowPowerBadge.classList.add('active');
+          } else {
+            el.lowPowerBadge.classList.remove('active');
+          }
+        }
+        batt.addEventListener('levelchange', render);
+        batt.addEventListener('chargingchange', render);
+        render();
+      } catch (e) {}
+    }
+
+    // Network Information (signal estimation)
+    function updateNetworkInfo() {
+      const nav = navigator;
+      let strength = 4;
+      if (nav.connection) {
+        const t = nav.connection.effectiveType || '';
+        if (t.includes('slow') || t.includes('2g')) strength = 1;
+        else if (t.includes('3g')) strength = 2;
+        else if (t.includes('4g')) strength = 4;
+        if (nav.connection.saveData) el.lowPowerBadge.classList.add('active');
+      }
+      const bars = el.signalBars.querySelectorAll('span');
+      bars.forEach((b, i) => {
+        const idx = i + 1;
+        if (idx <= strength) {
+          b.style.height = (6 + idx * 3) + 'px';
+          b.style.opacity = '1';
+          b.style.background = '#4caf50';
+        } else {
+          b.style.height = '6px';
+          b.style.opacity = '.25';
+          b.style.background = '#555';
+        }
+      });
+    }
+
+    // Service Worker registration (registro opcional)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/AME_Core/static/js/sw.js').catch(() => {/* no crítico */});
+    }
+
+    // Listeners
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+
+    window.addEventListener('load', async () => {
+      updateOnlineStatus();
+      initBattery();
+      updateNetworkInfo();
+      updateQueueUI();
+
+      // Verificar soporte biométrico y autenticarse
+      const biometricSupported = await biometricAuth.checkBiometricSupport();
+      if (biometricSupported) {
+        const authSuccess = await authenticateBiometric();
+        if (!authSuccess) {
+          el.lastAction.textContent = 'Autenticación biométrica requerida. No se puede continuar sin autenticación.';
+        }
+      } else {
+        el.lastAction.textContent = 'Autenticación biométrica no disponible en este dispositivo.';
+      }
+
+      // reintento inicial si online
+      if (navigator.onLine) setTimeout(flushQueue, 500);
+    });
+
+    // UI actions
+    el.sendTest.addEventListener('click', () => {
+      const payload = { type: 'test', ts: Date.now(), device: navigator.userAgent };
+      sendPayload(payload);
+    });
+
+    el.flushQueue.addEventListener('click', flushQueue);
+
+    el.retryBtn.addEventListener('click', () => {
+      if (navigator.onLine) flushQueue();
+      updateOnlineStatus();
+    });
+
+    // === Share Target UI ===
+    document.getElementById('flushShareBtn').addEventListener('click', () => {
+      if (window.AURA_FileHandler) {
+        window.AURA_FileHandler.flushQueue();
+      }
+    });
+
+    // Exponer API sencilla para otros módulos
+    window.AURA_MobileProtocol = {
+      enqueueAction: (action) => enqueue(Object.assign({ ts: Date.now() }, action)),
+      flush: flushQueue,
+      queueLength: () => readQueue().length,
+      getAuthToken: () => authToken
+    };
+  </script>
 </body>
 </html>

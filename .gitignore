@@ -1,0 +1,90 @@
+# ── AURA Ecosystem — GitIgnore Global ──
+
+# Environment & secrets
+.env
+.env.local
+*.key
+*.pem
+*.cert
+**/.env
+
+# Knowledge base (generated content)
+/knowledge_base/
+/AME_Core/forge_output/
+**/aura_memoria.json
+**/system_health.log
+
+# Virtual environments
+venv/
+.env/
+.venv/
+/venv/
+/env/
+/otro_proyecto/venv/
+/otro_proyecto/env/
+
+# Other projects
+/otro_proyecto/
+/AURA-Brain/
+/discord_service/
+/manifests/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+**/__pycache__/
+
+# Logs
+*.log
+**/*.log
+
+# Emergency lock created by crash overseer
+EMERGENCY_LOCK.txt
+
+# Binary / blobs
+blobs/
+*.pyd
+*.so
+*.dll
+*.exe
+*.bin
+*.db
+*.sqlite
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Node / frontend
+node_modules/
+package-lock.json
+yarn.lock
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+**/.obsidian/
+
+# Start-up scripts (Windows)
+*.bat
+*.vbs
+Setup/
+
+# GitHub workflows
+.github/
+
+# Config
+nodes_config.json
+AURA_Core/config.json
+
+# Test files
+test_*.py
+demo_*.py

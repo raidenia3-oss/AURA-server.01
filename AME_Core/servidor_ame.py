@@ -16,6 +16,8 @@ import threading
 import psutil
 
 from flask import Flask, send_from_directory, jsonify, request, render_template
+from flask_cors import CORS
+from flask_socketio import SocketIO, emit
 
 # ── Añadir AURA_Core al path para importar OSINTEngine ──
 AURA_CORE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'AURA_Core')
@@ -62,6 +64,9 @@ except Exception as e:
 
 # ──────────────────────── APP ────────────────────────
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'aura-2026-c2'
+CORS(app, resources={r"/*": {"origins": "*"}})
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 START_TIME = time.time()
 
 # ──── Configuración de Servicios (Bots) ────
@@ -1438,13 +1443,46 @@ def api_tunnel_status():
     return jsonify(tunnel_mgr.status())
 
 
-# ──────────────────────── MAIN ────────────────────────
+# ──────────────────────── WEBSOCKET EVENTS ────────────────────────
+
+@socketio.on('connect')
+def handle_connect():
+    """Cliente navegador conectado via WebSocket."""
+    print(f"[WS] Cliente conectado: {request.sid}")
+    emit('heartbeat', {'status': 'connected', 'server': 'AURA C2'})
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Cliente navegador desconectado."""
+    print(f"[WS] Cliente desconectado: {request.sid}")
+
+@socketio.on('telemetry')
+def handle_telemetry(data):
+    """Recibe telemetria de nodos y la difunde a todos los navegadores."""
+    socketio.emit('telemetry_broadcast', data)
+
+@socketio.on('command')
+def handle_command(data):
+    """Recibe comandos del navegador y los procesa."""
+    print(f"[WS] Comando recibido: {data}")
+    emit('command_ack', {'status': 'ok', 'received': data})
+
+def emit_event(event_type, data):
+    """Funcion global para que otros modulos emitan eventos a navegadores."""
+    socketio.emit(event_type, data)
+
+@app.route('/api/descargar-ame', methods=['GET'])
+def api_descargar_ame():
+    """Endpoint OTA para que el celular descargue el APK directamente."""
+    return send_from_directory(os.getcwd(), 'AME_PROD.apk', mimetype='application/vnd.android.package-archive', as_attachment=True, download_name='AME_v1.0.2.apk')
 
 if __name__ == '__main__':
     print("\n" + "="*50)
-    print("🚀 AURA Command Center — Servidor Flask v2")
+    print("🚀 AURA Command Center — Servidor Flask v3 + WebSocket")
     print(f"📡 Escuchando en: http://0.0.0.0:5000")
     print(f"📊 Dashboard:    http://localhost:5000/")
     print(f"🔧 API Status:   http://localhost:5000/api/status")
+    print(f"📱 OTA APK:      http://0.0.0.0:5000/api/descargar-ame")
+    print(f"🔌 WebSocket:    ws://0.0.0.0:5000 (CORS: *)")
     print("="*50 + "\n")
-    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False, use_reloader=False)

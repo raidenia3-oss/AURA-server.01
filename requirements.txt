@@ -1,6 +1,5 @@
-flask>=3.0
-requests>=2.31
-psutil>=5.9
-python-dotenv>=1.0
-firebase-admin>=6.0
-feedparser>=6.0
+duckduckgo-search
+flask
+requests
+pyautogui
+lxml

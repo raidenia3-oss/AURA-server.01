@@ -1,38 +1,12 @@
 {
-  "files.exclude": {
-    "**/env": true,
-    "**/venv": true,
-    "**/.venv": true,
-    "**/__pycache__": true,
-    "**/.pytest_cache": true,
-    "**/*.pyc": true,
-    "**/*.pyo": true,
-    "**/*.pyd": true
-  },
-  "search.exclude": {
-    "**/env": true,
-    "**/venv": true,
-    "**/.venv": true,
-    "**/__pycache__": true,
-    "**/.pytest_cache": true
-  },
-  "files.watcherExclude": {
-    "**/env/**": true,
-    "**/venv/**": true,
-    "**/.venv/**": true,
-    "**/__pycache__/**": true,
-    "**/.pytest_cache/**": true
-  },
-  "python.analysis.exclude": [
-    "**/env/**",
-    "**/venv/**",
-    "**/.venv/**",
-    "**/__pycache__/**",
-    "**/.pytest_cache/**"
-  ],
-  "python.analysis.autoSearchPaths": true,
-  "python.analysis.extraPaths": [
-    "./AURA_Core",
-    "./AME_Core"
-  ]
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-11",
+            "path": "C:\\Program Files\\Eclipse Adoptium\\jdk-11.0.31.11-hotspot",
+            "default": true,
+            "jdt.ls.java.home": "C:\\Program Files\\Eclipse Adoptium\\jdk-11.0.31.11-hotspot"
+        }
+    ],
+    "java.home": "C:\\Program Files\\Eclipse Adoptium\\jdk-11.0.31.11-hotspot",
+    "java.configuration.updateBuildConfiguration": "interactive"
 }
