@@ -8,6 +8,12 @@ import json
 import requests
 import hashlib
 import random
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+BASE = Path(__file__).resolve().parent.parent
+load_dotenv(BASE / ".env")
 
 # --- Configuración ---
 RC_REFRESH_TOKEN = os.environ.get("RC_REFRESH_TOKEN", "")

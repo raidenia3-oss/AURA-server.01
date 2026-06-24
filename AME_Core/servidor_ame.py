@@ -100,6 +100,16 @@ try:
 except Exception as e:
     print(f"⚠️  No se pudo iniciar WiFi watchdog: {e}")
 
+# --- Registrar endpoints biometricos ---
+try:
+    from biometric_endpoints import register_biometric_routes
+    register_biometric_routes(app)
+    print("Endpoints biometricos registrados")
+except ImportError as e:
+    print("biometric_endpoints no encontrado:", e)
+except Exception as e:
+    print("Error registrando endpoints biometricos:", e)
+
 # ──────────────────── RUTAS ────────────────────
 
 @app.route('/')

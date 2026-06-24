@@ -1,0 +1,60 @@
+{
+    "name": "ame-agent-vscode",
+    "displayName": "AME Agent - IA Local sin Censura",
+    "description": "Agente de IA conectado a servidores Colab sin censura. Chat, control del editor y acciones directas.",
+    "version": "1.0.0",
+    "engines": {
+        "vscode": "^1.85.0"
+    },
+    "categories": [
+        "Chat",
+        "Other"
+    ],
+    "activationEvents": [
+        "onView:ameAgentPanel"
+    ],
+    "main": "./src/extension.js",
+    "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "ame-agent",
+                    "title": "AME Agent",
+                    "icon": "icon.svg"
+                }
+            ]
+        },
+        "views": {
+            "ame-agent": [
+                {
+                    "type": "webview",
+                    "id": "ameAgentPanel",
+                    "name": "AME Agent"
+                }
+            ]
+        },
+        "commands": [
+            {
+                "command": "ameAgent.openPanel",
+                "title": "Abrir Panel AME Agent"
+            },
+            {
+                "command": "ameAgent.sendSelection",
+                "title": "Enviar selección a AME Agent"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "ameAgent.openPanel",
+                "key": "ctrl+shift+a"
+            },
+            {
+                "command": "ameAgent.sendSelection",
+                "key": "ctrl+shift+q"
+            }
+        ]
+    },
+    "devDependencies": {
+        "@types/node": "^25.9.3"
+    }
+}

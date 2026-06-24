@@ -1,0 +1,120 @@
+{
+  "timestamp": "2026-06-12T21:25:42.267557",
+  "host_info": {
+    "local_ip": "192.168.3.10",
+    "hostname": "DESKTOP-7BR2AA6",
+    "platform": "Windows",
+    "emulator_bridge": "10.0.2.2"
+  },
+  "huggingface_server": {
+    "url": "https://raiden456-slut.hf.space",
+    "online": true,
+    "model": "qwen2.5-coder-3b-abliterated"
+  },
+  "services_local": {
+    "5000": {
+      "name": "FastAPI (AURA Core)",
+      "port": 5000,
+      "active": false,
+      "status": "OFFLINE"
+    },
+    "5555": {
+      "name": "ADB Emulator",
+      "port": 5555,
+      "active": true,
+      "status": "ONLINE"
+    },
+    "8765": {
+      "name": "GBrain WebSocket",
+      "port": 8765,
+      "active": false,
+      "status": "OFFLINE"
+    },
+    "11434": {
+      "name": "Ollama Local LLM",
+      "port": 11434,
+      "active": false,
+      "status": "OFFLINE"
+    },
+    "8080": {
+      "name": "Dashboard Web",
+      "port": 8080,
+      "active": false,
+      "status": "OFFLINE"
+    },
+    "3000": {
+      "name": "Node.js Dev Server",
+      "port": 3000,
+      "active": false,
+      "status": "OFFLINE"
+    },
+    "5001": {
+      "name": "API Backup",
+      "port": 5001,
+      "active": false,
+      "status": "OFFLINE"
+    },
+    "443": {
+      "name": "HTTPS External",
+      "port": 443,
+      "active": false,
+      "status": "OFFLINE"
+    }
+  },
+  "services_from_emulator": {
+    "5000": {
+      "name": "FastAPI (AURA Core)",
+      "port": 5000,
+      "active": false,
+      "status": "OFFLINE"
+    },
+    "5555": {
+      "name": "ADB Emulator",
+      "port": 5555,
+      "active": false,
+      "status": "OFFLINE"
+    },
+    "8765": {
+      "name": "GBrain WebSocket",
+      "port": 8765,
+      "active": false,
+      "status": "OFFLINE"
+    },
+    "11434": {
+      "name": "Ollama Local LLM",
+      "port": 11434,
+      "active": false,
+      "status": "OFFLINE"
+    },
+    "8080": {
+      "name": "Dashboard Web",
+      "port": 8080,
+      "active": false,
+      "status": "OFFLINE"
+    },
+    "3000": {
+      "name": "Node.js Dev Server",
+      "port": 3000,
+      "active": false,
+      "status": "OFFLINE"
+    },
+    "5001": {
+      "name": "API Backup",
+      "port": 5001,
+      "active": false,
+      "status": "OFFLINE"
+    },
+    "443": {
+      "name": "HTTPS External",
+      "port": 443,
+      "active": false,
+      "status": "OFFLINE"
+    }
+  },
+  "summary": {
+    "total_services": 8,
+    "active_local": 1,
+    "active_from_emulator": 0,
+    "hf_online": true
+  }
+}

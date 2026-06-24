@@ -1,0 +1,103 @@
+{
+  "timestamp": "2026-06-12T22:28:49.707841",
+  "ecosystem": "AURA/AME",
+  "nodes": [
+    {
+      "id": "nodo_central",
+      "name": "🖥️ Nodo Central — PC Local",
+      "type": "central",
+      "ip_local": "192.168.3.10",
+      "ip_public": "45.189.109.185",
+      "lat": -11.99,
+      "lon": -77.0458,
+      "city": "Independencia",
+      "country": "Peru",
+      "org": "Bantel SAC",
+      "status": "ACTIVE",
+      "color": "#00FF41",
+      "description": "Estación de comando principal del ecosistema AURA"
+    },
+    {
+      "id": "nodo_conciencia",
+      "name": "☁️ Nodo de Conciencia — Hugging Face",
+      "type": "cloud",
+      "url": "https://raiden456-slut.hf.space",
+      "lat": 48.8566,
+      "lon": 2.3522,
+      "city": "Paris",
+      "country": "France",
+      "org": "Hugging Face (OVH Hosting)",
+      "status": "ONLINE",
+      "color": "#FFD700",
+      "description": "Servidor permanente con modelo Qwen para análisis táctico"
+    },
+    {
+      "id": "nodo_emulador",
+      "name": "📱 Nodo Emulador — Android AVD",
+      "type": "emulator",
+      "ip": "10.0.2.2",
+      "lat": -11.99,
+      "lon": -77.0458,
+      "city": "Independencia",
+      "country": "Peru",
+      "status": "ACTIVE",
+      "color": "#00BFFF",
+      "description": "Emulador Android conectado vía ADB"
+    }
+  ],
+  "targets": [
+    {
+      "id": "target_huggingface_api",
+      "name": "🤗 Hugging Face Inference API",
+      "type": "target",
+      "url": "https://api-inference.huggingface.co",
+      "lat": 48.8566,
+      "lon": 2.3522,
+      "city": "Paris",
+      "country": "France",
+      "status": "MONITORING",
+      "color": "#FF6B6B"
+    },
+    {
+      "id": "target_ollama_registry",
+      "name": "🦙 Ollama Model Registry",
+      "type": "target",
+      "url": "https://registry.ollama.ai",
+      "lat": 37.7749,
+      "lon": -122.4194,
+      "city": "San Francisco",
+      "country": "USA",
+      "status": "STANDBY",
+      "color": "#FF6B6B"
+    },
+    {
+      "id": "target_github",
+      "name": "🐙 GitHub — AURA Repository",
+      "type": "target",
+      "url": "https://github.com/raidenia3-oss/AURA-server.01",
+      "lat": 37.7749,
+      "lon": -122.4194,
+      "city": "San Francisco",
+      "country": "USA",
+      "status": "SYNCED",
+      "color": "#FF6B6B"
+    },
+    {
+      "id": "target_cloudflare",
+      "name": "🛡️ Cloudflare Tunnel",
+      "type": "target",
+      "url": "https://cloudflare.com",
+      "lat": 37.3861,
+      "lon": -122.0839,
+      "city": "San Jose",
+      "country": "USA",
+      "status": "STANDBY",
+      "color": "#FF6B6B"
+    }
+  ],
+  "summary": {
+    "total_nodes": 3,
+    "total_targets": 4,
+    "active_nodes": 2
+  }
+}

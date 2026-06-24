@@ -7,16 +7,22 @@ import json
 import time
 import random
 import requests
+from pathlib import Path
+from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, expect
+
+# Cargar variables de entorno
+BASE = Path(__file__).resolve().parent.parent
+load_dotenv(BASE / ".env")
 
 # --- Configuración (Puedes mover esto a un archivo config.json) ---
 CONFIG = {
     "rollercoin": {
         "url_base": "https://rollercoin.com",
-        "refresh_token": os.environ.get("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzZXNzaW9uX2lkIjoiNjllZTRlNWFkMjhhMGQyNDgwZTAxNTM1IiwidG9rZW4iOiIyNzc4MWVhMi00NmRiLTRkMjUtYjE2Zi00NTVhYTYxMTFkNjYiLCJpYXQiOjE3Nzc3NzMxMDEsImV4cCI6MTgwOTMzMDcwMX0.5p4HchSBTMTr7B5LrgcniVo4YCeIbnJIL9co8k24kH8", ""),
-        "whatsapp_number": os.environ.get("+51 942858492", ""),
-        "whatsapp_apikey": os.environ.get("6272348", ""),
-        "headless": false, # Pon en False para depurar
+        "refresh_token": os.environ.get("RC_REFRESH_TOKEN", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzZXNzaW9uX2lkIjoiNjllZTRlNWFkMjhhMGQyNDgwZTAxNTM1IiwidG9rZW4iOiIyNzc4MWVhMi00NmRiLTRkMjUtYjE2Zi00NTVhYTYxMTFkNjYiLCJpYXQiOjE3Nzc3NzMxMDEsImV4cCI6MTgwOTMzMDcwMX0.5p4HchSBTMTr7B5LrgcniVo4YCeIbnJIL9co8k24kH8"),
+        "whatsapp_number": os.environ.get("RC_WHATSAPP_NUMBER", "+51 942858492"),
+        "whatsapp_apikey": os.environ.get("RC_WHATSAPP_APIKEY", "6272348"),
+        "headless": False, # Pon en False para depurar
         "juegos_a_jugar": 3, # Cuántos juegos por ciclo
         "tiempo_espera_ciclo": 3600 # 1 hora entre ciclos
     }

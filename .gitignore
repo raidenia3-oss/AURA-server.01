@@ -1,90 +1,91 @@
-# ── AURA Ecosystem — GitIgnore Global ──
+# AURA/AME - .gitignore
+# Archivos generados por Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg
+.egg-info/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
-# Environment & secrets
+# Configuración local
 .env
 .env.local
-*.key
-*.pem
-*.cert
-**/.env
+.env.backup
+.env.template
+aura_urls.json
+aura_status.json
+health_check_results.json
 
-# Knowledge base (generated content)
-/knowledge_base/
-/AME_Core/forge_output/
-**/aura_memoria.json
-**/system_health.log
-
-# Virtual environments
-venv/
-.env/
-.venv/
-/venv/
-/env/
-/otro_proyecto/venv/
-/otro_proyecto/env/
-
-# Other projects
-/otro_proyecto/
-/AURA-Brain/
-/discord_service/
-/manifests/
-
-# Python cache
-__pycache__/
-*.py[cod]
-*.pyo
-*.egg-info/
-dist/
-build/
-**/__pycache__/
-
-# Logs
-*.log
-**/*.log
-
-# Emergency lock created by crash overseer
-EMERGENCY_LOCK.txt
-
-# Binary / blobs
-blobs/
-*.pyd
-*.so
-*.dll
-*.exe
-*.bin
+# Bases de datos
 *.db
 *.sqlite
+*.sqlite3
+*.db-journal
 
-# OS files
+# Cloudflare
+.cloudflared/
+cloudflared/config.yml
+
+# Godot
+godot_game/.godot/
+godot_game/project.godot.lock
+godot_game/import/
+
+# Android/Termux
+ame_config.json
+.gradle/
+app/build/
+.venv*/
+env*/
+venv_decision_core/
+*.apk
+*.jar
+*.so
+*.dex
+*.obb
+*.zip
+*.7z
+*.rar
+*.tar.gz
+
+# Archivos de sistema
 .DS_Store
 Thumbs.db
+desktop.ini
 *.swp
 *.swo
-*~
+*.bak
+*.tmp
+*.log
+*.old
+*.tmp
+*.crash
+*.dmp
 
-# Node / frontend
+# Archivos de compilación
+dist/
+build/
 node_modules/
-package-lock.json
-yarn.lock
+output/
+*.min.js
+*.min.css
+*.map
 
-# IDE
-.vscode/
+# Archivos de IDE
 .idea/
-*.code-workspace
-**/.obsidian/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
 
-# Start-up scripts (Windows)
-*.bat
-*.vbs
-Setup/
-
-# GitHub workflows
-.github/
-
-# Config
-nodes_config.json
-AURA_Core/config.json
-
-# Test files
-test_*.py
-demo_*.py
+# Incluir directorios vacíos (para mantener estructura)
+!godot_game/assets/.gitkeep
+!godot_game/scenes/.gitkeep
+!godot_game/autoloads/.gitkeep
+!godot_game/scripts/.gitkeep

@@ -79,44 +79,81 @@
   </style>
 </head>
 <body>
-  <div class="status-bar" aria-hidden="false">
-    <div class="status-item" id="connectionStatus">Estado: <strong id="connText">—</strong></div>
-    <div class="status-item">Batería: <div class="battery" aria-hidden="true"><div id="batteryFill" class="battery-fill"></div></div> <small id="batteryText"></small></div>
-    <div class="status-item signal">Señal: <div class="signal-bars" id="signalBars"><span></span><span></span><span></span><span></span></div></div>
-    <div class="status-item offline-queue" id="queueIndicator" style="display:none">Cola offline: <span id="queueCount">0</span></div>
-    <div class="status-item low-power" id="lowPowerBadge">Modo bajo consumo</div>
+  <!-- React DnD Provider wrapper (needed for drag & drop) -->
+  <div id="dnd-wrapper" style="height:100vh;overflow:hidden;">
+    <div id="tactical-dashboard" style="height:100vh;overflow-y:auto;"></div>
   </div>
 
-  <main>
-    <h1>AURA — Dashboard</h1>
-    <p>Interfaz móvil optimizada. El protocolo móvil usa cola offline ligera, detección de red y ahorro de energía.</p>
-
-    <section>
-      <button class="btn" id="sendTest">Enviar prueba (cola si está offline)</button>
-      <button class="btn" id="flushQueue" style="background:#4caf50">Forzar envío cola</button>
-      <p><small id="lastAction">Sin acciones todavía</small></p>
-    </section>
-
-    <!-- === SHARE TARGET STATUS === -->
-    <section id="shareTargetSection" style="margin-top:20px;border-top:1px solid #222;padding-top:16px;">
-      <h3 style="display:flex;align-items:center;gap:8px;">
-        📤 Compartir Archivos
-        <span id="shareQueueIndicator" style="display:none;font-size:13px;background:rgba(255,152,0,0.15);padding:2px 8px;border-radius:10px;color:#ff9800;">
-          Cola: <span id="shareQueueCount">0</span>
-        </span>
-      </h3>
-      <p><small>Comparte un PDF, TXT o imagen desde cualquier app de Android a AURA para analizarlo.</small></p>
-      <div id="shareStatus" style="display:none;padding:10px 14px;background:rgba(76,175,80,0.1);border-radius:8px;border-left:3px solid #4caf50;margin-bottom:8px;">
-        ⏳ Procesando...
+  <!-- ============ TEMPLATE FOR REACT DASHBOARD ============ -->
+  <div id="tactical-template" style="display:none;">
+    <div class="tactical-dashboard min-h-screen bg-gray-50 p-6">
+      <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold text-gray-800">AME Tactical Command Center</h1>
+        <div class="flex items-center space-x-2" id="connectionInfo">
+          <div class="w-3 h-3 rounded-full bg-yellow-500" id="connectionDot"></div>
+          <span class="text-sm text-yellow-600" id="connectionLabel">connecting</span>
+          <span class="text-xs text-gray-500" id="lastUpdateLabel"></span>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <span style="background:rgba(255,87,34,0.12);color:#ff5722;padding:4px 10px;border-radius:6px;font-size:12px;">📄 PDF</span>
-        <span style="background:rgba(33,150,243,0.12);color:#2196f3;padding:4px 10px;border-radius:6px;font-size:12px;">📝 TXT</span>
-        <span style="background:rgba(76,175,80,0.12);color:#4caf50;padding:4px 10px;border-radius:6px;font-size:12px;">🖼️ JPG/PNG</span>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white p-4 rounded-lg shadow" id="modulesPanel">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold">Available Modules</h2>
+            <span class="text-sm text-gray-500">9 modules</span>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-3" id="modulesGrid"></div>
+        </div>
+
+        <div class="bg-white p-4 rounded-lg shadow col-span-1 md:col-span-2 lg:col-span-3" id="nodesPanel">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold">Mobile Nodes</h2>
+            <div class="flex items-center space-x-2">
+              <span class="text-sm text-gray-500" id="nodeStats"></span>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4" id="nodesGrid"></div>
+        </div>
       </div>
-      <button class="btn" id="flushShareBtn" style="background:#ff9800;margin-top:12px;">Reintentar archivos pendientes</button>
-    </section>
-  </main>
+
+      <div class="bg-white p-4 rounded-lg shadow task-panel mb-6" id="taskPanel" style="display:none;">
+        <div class="flex justify-between items-center mb-4">
+          <div class="flex items-center space-x-2">
+            <h2 class="text-xl font-semibold" id="taskModuleName">Task</h2>
+            <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full" id="taskNodeName">node</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span class="task-status" id="taskStatus">running</span>
+          </div>
+        </div>
+        <div class="flex flex-col md:flex-row gap-4">
+          <div class="task-info w-full md:w-1/3">
+            <div class="bg-gray-50 p-4 rounded-lg">
+              <div class="mb-3">
+                <div class="text-sm font-medium mb-1">Progress</div>
+                <div class="task-progress mb-1">
+                  <div class="task-progress-bar" id="taskProgressBar" style="width:0%"></div>
+                </div>
+                <div class="text-xs flex justify-between">
+                  <span id="taskProgressText">0%</span>
+                </div>
+              </div>
+              <div class="mb-3">
+                <div class="text-sm font-medium mb-1">Recent Output</div>
+                <div class="text-xs text-gray-600 h-20 overflow-y-auto" id="taskRecentOutput"></div>
+              </div>
+              <button class="w-full bg-red-500 hover:bg-red-600 text-white text-xs py-1 px-2 rounded" id="cancelTaskBtn" style="display:none;">
+                Cancel Task
+              </button>
+            </div>
+          </div>
+          <div class="task-terminal w-full md:w-2/3">
+            <div class="terminal-stream bg-gray-900 text-green-400 p-2 rounded-lg h-64 overflow-y-auto" id="terminalStream"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="overlay-offline" id="offlineOverlay" role="dialog" aria-modal="true">
     <h2>Sin conexión</h2>
