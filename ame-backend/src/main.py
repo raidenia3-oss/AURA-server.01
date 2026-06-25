@@ -1,121 +1,141 @@
 """
-AME Backend - Servidor principal.
+AURA Backend main entrypoint.
+Exposes WebSocket bridge and AI-powered chat endpoint.
 """
 
 from __future__ import annotations
 
-import base64
-import io
 import os
-from datetime import datetime, timezone
+import asyncio
+import json
+from pathlib import Path
 from typing import Optional
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
-import jwt
-import psutil
-from PIL import ImageGrab
+from fastapi.middleware.cors import CORSMiddleware
 
-from src.automation.stealth_browser import StealthBrowser
-from src.services.ai_engine import AIEngine
+from ame_backend.src.services.ai_engine import AIEngine
+from ame_backend.src.automation.task_manager import TaskManager
+
+app = FastAPI(title="AURA Backend")
+ai = AIEngine()
+task_mgr = TaskManager()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
-class _Server:
-    def __init__(self) -> None:
-        self.app = FastAPI(title="AME Backend", version="0.1.0")
-        self._secret = os.getenv("JWT_SECRET", "ame-secret-key-change-in-production")
-        self.browser = StealthBrowser(headless=True)
-        self.ai = AIEngine()
-        self._register_routes()
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok", "ai": ai.health_check()}
 
-    def _register_routes(self) -> None:
-        app = self.app
 
-        @app.get("/health")
-        async def health() -> JSONResponse:
-            return JSONResponse({"status": "ok", "ts": datetime.now(timezone.utc).isoformat()})
+@app.post("/api/chat")
+def chat(payload: dict) -> dict:
+    prompt = payload.get("prompt", "")
+    context = payload.get("context")
+    result = ai.chat(prompt=prompt, context=context)
+    text = result.get("text", "")
+    intent = result.get("intent")
+    if intent and intent.get("action") == "START_BOT":
+        target = intent.get("target", "surveys")
+        if target == "surveys":
+            payload.setdefault("start_url", "https://example.com/survey")
+        status = task_mgr.start_survey_bot(payload.get("start_url", "https://example.com/survey"))
+        return {
+            "reply": text or "Bot de encuestas iniciado.",
+            "intent": intent,
+            "task_status": status,
+        }
+    return {"reply": text, "provider": result.get("provider")}
 
-        @app.get("/ai/health")
-        async def ai_health() -> JSONResponse:
-            return JSONResponse(self.ai.health_check())
 
-        @app.post("/auth/token")
-        async def auth_token(user_id: str = "ame-user") -> JSONResponse:
-            token = jwt.encode(
-                {"sub": user_id, "iat": datetime.now(timezone.utc)}, self._secret, algorithm="HS256"
-            )
-            return JSONResponse({"token": token, "user_id": user_id})
+@app.websocket("/ws/bridge")
+async def ws_bridge(ws: WebSocket) -> None:
+    await ws.accept()
+    queue: asyncio.Queue[str] = asyncio.Queue()
+    shutdown = False
 
-        @app.websocket("/ws/bridge")
-        async def ws_bridge(websocket: WebSocket) -> None:
+    async def reader() -> None:
+        nonlocal shutdown
+        while not shutdown:
+            data = await ws.receive_text()
             try:
-                await websocket.accept()
-                first = await websocket.receive_text()
-                try:
-                    jwt.decode(first, self._secret, algorithms=["HS256"])
-                except Exception:
-                    await websocket.close(code=1008)
-                    return
-                await websocket.send_text("connected")
-                while True:
-                    try:
-                        msg = await asyncio.wait_for(websocket.receive_text(), timeout=10)
-                        if msg.lower() == "ping":
-                            await websocket.send_json(
-                                {"ping": datetime.now(timezone.utc).isoformat()}
-                            )
-                            continue
-                        await websocket.send_text(f"ACK:{msg[:64]}")
-                    except asyncio.TimeoutError:
-                        await websocket.send_json({"ping": datetime.now(timezone.utc).isoformat()})
-            except WebSocketDisconnect:
-                pass
-            except Exception:
-                try:
-                    await websocket.close()
-                except Exception:
-                    pass
+                msg = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+            if msg.get("type") == "chat":
+                prompt = msg.get("prompt", "")
+                context = msg.get("context")
+                result = ai.chat(prompt=prompt, context=context)
+                text = result.get("text", "")
+                intent = result.get("intent")
+                if intent and intent.get("action") == "START_BOT":
+                    status = task_mgr.start_survey_bot("https://example.com/survey")
+                    await ws.send_text(
+                        json.dumps(
+                            {"type": "chat", "reply": text or "Iniciando bot...", "task": status}
+                        )
+                    )
+                else:
+                    await ws.send_text(
+                        json.dumps(
+                            {"type": "chat", "reply": text, "provider": result.get("provider")}
+                        )
+                    )
+            elif msg.get("type") == "task_stop":
+                task_mgr.stop_survey_bot()
 
-        @app.websocket("/ws/browser-stream")
-        async def ws_browser_stream(websocket: WebSocket) -> None:
-            await websocket.accept()
-            try:
-                await websocket.send_json({"status": "connected", "engine": "screen"})
-                while True:
-                    try:
-                        frame = await self._capture_screen()
-                        if frame:
-                            await websocket.send_bytes(frame)
-                        else:
-                            await websocket.send_json({"status": "waiting"})
-                    except Exception as exc:
-                        await websocket.send_json({"status": "error", "detail": str(exc)})
-                        break
-            except WebSocketDisconnect:
-                pass
-            finally:
-                try:
-                    await websocket.close()
-                except Exception:
-                    pass
+    async def writer() -> None:
+        nonlocal shutdown
+        while not shutdown:
+            item = await queue.get()
+            await ws.send_text(item)
 
-    async def _capture_screen(self) -> Optional[bytes]:
+    reader_task = asyncio.create_task(reader())
+    writer_task = asyncio.create_task(writer())
+
+    def emit_log(payload: str) -> None:
         try:
-            screenshot = ImageGrab.grab()
-            buffer = io.BytesIO()
-            screenshot.save(buffer, format="JPEG", quality=55)
-            return buffer.getvalue()
+            queue.put_nowait(payload)
         except Exception:
-            return None
+            pass
+
+    loop = asyncio.get_event_loop()
+    original_run_survey = getattr(task_mgr._solver, "solve_survey", None)
+
+    async def patched_run_survey(start_url: str) -> None:
+        setattr(task_mgr._solver, "_on_event", emit_log)
+        if original_run_survey:
+            await original_run_survey(start_url)
+
+    setattr(task_mgr._solver, "solve_survey", patched_run_survey)
+
+    try:
+        while True:
+            await asyncio.sleep(0.25)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        shutdown = True
+        reader_task.cancel()
+        writer_task.cancel()
+        try:
+            await reader_task
+        except Exception:
+            pass
+        try:
+            await writer_task
+        except Exception:
+            pass
 
 
-def create_app() -> FastAPI:
-    s = _Server()
-    return s.app
+if __name__ == "__main__":
+    import uvicorn
 
-
-app = create_app()
+    uvicorn.run("ame_backend.src.main:app", host="0.0.0.0", port=8000, reload=False)

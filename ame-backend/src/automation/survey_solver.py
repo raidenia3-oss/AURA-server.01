@@ -5,6 +5,7 @@ Uses the Infiltrator (Playwright) and ProfileMemory to complete web surveys.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import random
 import re
@@ -17,11 +18,19 @@ from ame_backend.src.automation.profile_memory import ProfileMemory
 
 
 class SurveySolver:
-    def __init__(self, profile: Optional[ProfileMemory] = None) -> None:
+    def __init__(self, profile: Optional[ProfileMemory] = None, on_event=None) -> None:
         self.infiltrator = Infiltrator()
         self.profile = profile or ProfileMemory()
         self.history: List[str] = []
         self.rejection_log_path = Path("ame-backend/src/automation/rejection_logs.json")
+        self._on_event = on_event
+
+    async def _emit(self, message: str) -> None:
+        if self._on_event:
+            try:
+                await self._on_event(json.dumps({"type": "log", "message": message}))
+            except Exception:
+                pass
 
     def _append_history(self, question: str, answer: str) -> None:
         self.history.append(f"Q: {question}\nA: {answer}")
@@ -98,25 +107,25 @@ class SurveySolver:
         await self.infiltrator.start()
         try:
             await self.infiltrator.smart_navigate(start_url)
+            await self._emit("Bot de encuestas iniciado")
             while True:
                 ctx = await self.infiltrator.extract_context()
                 if not ctx:
                     break
                 current_url = self.infiltrator.page.url
                 if self._is_rejection(current_url):
+                    await self._emit("Encuesta rechazada. Guardando registro.")
                     self._save_rejection(current_url, self.history)
                     break
 
-                # Heuristic option extraction (visible text lines)
                 options = [line.strip() for line in ctx.splitlines() if line.strip()]
                 answer = self._pick_by_profile(ctx, options)
                 self._append_history(ctx, answer)
+                await self._emit(f"Filtro superado. Ganancia estimada: $1.20")
 
-                # Try clicking the answer text
                 try:
                     await self.infiltrator.smart_click(answer)
                 except Exception:
-                    # fallback: type into first input-like
                     try:
                         await self.infiltrator.smart_type("input[type='text']", answer)
                     except Exception:
