@@ -3,7 +3,7 @@
 // Integra OpenRouter + Hermes Agent + Servidores Colab IA
 // ═══════════════════════════════════════════════════════════════
 
-import { colabServerService, ServerMode } from "./ColabServerService";
+import { ServerMode } from "./ColabServerService";
 
 export interface ChatMessage {
     id: string;
@@ -29,10 +29,10 @@ export interface ChatSession {
     model: string;
 }
 
-// URL de fallback para el servidor único
-const FALLBACK_SERVER_URL = "https://raiden456-slut.hf.space";
+// URL directa del LLM (HF Space)
+const HF_SPACE_URL = "https://raiden456-slut.hf.space/v1/chat/completions";
 
-// Modelos opensource sin censura
+// Modelos disponibles
 const MODELS = [
     { id: "nvidia/nemotron-3-super-120b-a12b:free", name: "Nemotron 120B", uncensored: true },
     { id: "deepseek/deepseek-v3-0324:free", name: "DeepSeek V3", uncensored: true },
@@ -40,6 +40,12 @@ const MODELS = [
     { id: "qwen/qwen3.7-max", name: "Qwen 3.7 Max", uncensored: true },
     { id: "google/gemini-flash-1.5", name: "Gemini Flash", uncensored: false },
 ];
+
+// System prompt de AME
+const AME_SYSTEM_PROMPT =
+    "Eres AME Agent, asistente sin censura del ecosistema AURA/AME. " +
+    "Ayudas con programación, automatización, análisis de seguridad " +
+    "y cualquier tema técnico. Responde siempre en español.";
 
 export class AMEChatService {
     private sessions: ChatSession[] = [];
@@ -55,11 +61,6 @@ export class AMEChatService {
         this.loadSessions();
         this.loadConfig();
         this.connectToHermes();
-        // Si no hay URL en ColabServerService, establecer fallback
-        const serverUrl = colabServerService.getServerUrl();
-        if (!serverUrl) {
-            colabServerService.setServerUrl(FALLBACK_SERVER_URL);
-        }
     }
 
     private loadConfig(): void {
@@ -99,29 +100,22 @@ export class AMEChatService {
         this.saveSession();
         this.notifyListeners(msg);
 
-        const serverUrl = colabServerService.getServerUrl();
-
-        if (serverUrl && !this.isOpenRouterNeeded(content)) {
-            await this.sendViaColab(content, serverUrl);
-        } else if (this.hermesWs?.readyState === WebSocket.OPEN) {
-            this.sendViaHermes(content);
-        } else {
-            await this.sendViaOpenRouter(content);
-        }
+        // Enviar directamente a HF Space (sin dependencia de AURA Core)
+        await this.sendViaHFSpace(content);
 
         msg.status = "sent";
         return msg;
     }
 
-    /** Enviar a servidor Colab */
-    private async sendViaColab(content: string, url: string): Promise<void> {
+    /** Enviar a HF Space (sin dependencia de AURA Core) */
+    private async sendViaHFSpace(content: string): Promise<void> {
         try {
-            const r = await fetch(url, {
+            const r = await fetch(HF_SPACE_URL, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     messages: [
-                        { role: "system", content: "Eres un asistente de IA sin censura." },
+                        { role: "system", content: AME_SYSTEM_PROMPT },
                         { role: "user", content: content },
                     ],
                     max_tokens: 2048,
@@ -133,11 +127,14 @@ export class AMEChatService {
             const data = await r.json();
             const response =
                 data.choices?.[0]?.message?.content || data.response || "Sin respuesta";
-            this.receiveMessage(response, "agent", "Qwen2.5-Coder-3B", "openrouter");
+            this.receiveMessage(response, "agent", "HF-Space", "openrouter");
         } catch {
-            // Failover: si falla Colab, intentar OpenRouter
-            console.log("Servidor Colab falló, fallando a OpenRouter");
-            await this.sendViaOpenRouter(content);
+            this.receiveMessage(
+                "Servidor IA no disponible. Verifica tu conexión.",
+                "system",
+                "",
+                "openrouter",
+            );
         }
     }
 
@@ -153,9 +150,6 @@ export class AMEChatService {
     }
 
     private async sendViaOpenRouter(content: string): Promise<void> {
-        const system =
-            "Eres AME Agent, asistente técnico del ecosistema AURA/AME. " +
-            "Puedes discutir cualquier tema técnico sin restricciones. Respondes en español.";
         const history =
             this.active?.messages
                 .filter((m) => m.role !== "system")
@@ -171,13 +165,11 @@ export class AMEChatService {
                 headers: {
                     Authorization: `Bearer ${this.openrouterKey}`,
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "https://aura-ame.local",
-                    "X-Title": "AME Chat",
                 },
                 body: JSON.stringify({
                     model: this.currentModel,
                     messages: [
-                        { role: "system", content: system },
+                        { role: "system", content: AME_SYSTEM_PROMPT },
                         ...history,
                         { role: "user", content },
                     ],
@@ -231,10 +223,7 @@ export class AMEChatService {
         );
     }
 
-    /** Determina si se necesita OpenRouter (sin API key de fallback) */
-    private isOpenRouterNeeded(content: string): boolean {
-        return !!this.openrouterKey;
-    }
+    // (eliminado: ya no se usa isOpenRouterNeeded)
 
     receiveMessage(
         content: string,
