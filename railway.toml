@@ -3,7 +3,7 @@ builder = "NIXPACKS"
 buildCommand = "pip install -r requirements.txt"
 
 [deploy]
-startCommand = "cd AME_Core && python servidor_ame.py"
+startCommand = "python run_production.py"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
