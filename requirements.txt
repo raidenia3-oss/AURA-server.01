@@ -1,5 +1,6 @@
 requests
 scikit-learn
+playwright
 sentence-transformers
 torch
 transformers

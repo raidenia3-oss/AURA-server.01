@@ -1,9 +1,17 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "pip install -r requirements.txt"
+buildCommand = "cd ame-backend && pip install -r requirements.txt"
 
 [deploy]
-startCommand = "cd AME_Core && python servidor_ame.py"
+startCommand = "cd ame-backend && python -m uvicorn main:app --host 0.0.0.0 --port $PORT"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
+
+[variables]
+RAILWAY_API_URL = "${RAILWAY_PUBLIC_URL}"
+HF_API_TOKEN = "${HF_API_TOKEN}"
+HF_SPACE_URL = "${HF_SPACE_URL}"
+VERCEL_FRONTEND_URL = "${VERCEL_FRONTEND_URL}"
+TELEGRAM_BOT_TOKEN = "${TELEGRAM_BOT_TOKEN}"
+TELEGRAM_CHAT_ID = "${TELEGRAM_CHAT_ID}"
