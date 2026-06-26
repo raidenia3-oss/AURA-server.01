@@ -1441,10 +1441,11 @@ def api_tunnel_status():
 # ──────────────────────── MAIN ────────────────────────
 
 if __name__ == '__main__':
+    _port = int(os.environ.get('PORT', 5000))
     print("\n" + "="*50)
     print("🚀 AURA Command Center — Servidor Flask v2")
-    print(f"📡 Escuchando en: http://0.0.0.0:5000")
-    print(f"📊 Dashboard:    http://localhost:5000/")
-    print(f"🔧 API Status:   http://localhost:5000/api/status")
+    print(f"📡 Escuchando en: http://0.0.0.0:{_port}")
+    print(f"📊 Dashboard:    http://localhost:{_port}/")
+    print(f"🔧 API Status:   http://localhost:{_port}/api/status")
     print("="*50 + "\n")
-    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+    app.run(host='0.0.0.0', port=_port, debug=False, use_reloader=False)
