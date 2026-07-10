@@ -1,0 +1,134 @@
+# =============================================
+# .dockerignore - AURA
+# Excluye archivos innecesarios del contexto Docker
+# =============================================
+
+# Git
+.git
+.gitignore
+
+# Documentación masiva
+*.md
+!README.md
+docs/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node modules (no necesario en frontend build)
+node_modules/
+npm-debug.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Entornos virtuales
+venv/
+env/
+.venv/
+
+# Archivos de configuración local
+.env.local
+.env.development
+.env.production
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Base de datos local (se usan volúmenes Docker)
+*.db
+*.sqlite
+*.sqlite3
+AURA_Core/vector_db/
+AURA_Core/sqlite/
+
+# Builds y dist anteriores
+dist/
+build/
+out/
+
+# Android
+*.apk
+*.aab
+AME_ECOSYSTEM/ame_app_android/build/
+AME_ECOSYSTEM/ame_app_android/app/build/
+
+# Godot
+godot_game/.godot/
+godot_game/export/
+
+# Archivos temporales
+tmp/
+temp/
+*.tmp
+
+# Docker
+docker-compose*.yml
+!docker-compose.yml
+
+# CI/CD
+.github/
+
+# Tests
+tests/
+test_*.py
+*_test.py
+
+# Scripts de desarrollo
+scripts/
+Setup/
+AME-termux/
+AME_EXPORT_PACKAGE/
+AURA-Desktop/
+FRONTEND_AURA_UNITY/
+FRONTEND_AME_GODOT/
+colab/
+lazy_income_hub/
+otro_proyecto/
+web_vault/
+aura_urls/
+blobs/
+AURA_Archive/
+_AURA_Archive/
+manifests/
+knowledge_base/
+incoming_patches/
+plugins/
+
+# Archivos de configuración específicos
+.vscode/
+.clinerules
+aura_skills_registry.json
+nodes_config.json
+feature_roadmap.json
+version.json
+greeted_state.md
+ame_nube.json
+network_status.json
+geo_coordinates.json
+knowledge_base.json
+
+# SSH Keys
+.ssh/
+*.pem
+*.key
+
+# Credenciales
+credentials.json
+
+# Archivos de sistema operativo
+nul

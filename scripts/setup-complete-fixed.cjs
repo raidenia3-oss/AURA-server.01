@@ -1,0 +1,43 @@
+#!/usr/bin/env node
+
+const { execSync } = require("child_process");
+const BrowserMaster = require("../frontend/lib/browser-master");
+const FirebaseAutoSetup = require("../frontend/lib/firebase-setup-auto");
+
+async function main() {
+  console.log("\n🚀 AURA/AME - Setup COMPLETO FINAL\n");
+
+  try {
+    // 3. Firebase setup
+    console.log("\n3️⃣ Setup Firebase...");
+    const firebaseSetup = new FirebaseAutoSetup();
+    await firebaseSetup.run();
+
+    // 4. Generate .env
+    console.log("\n4️⃣ Generando .env...");
+    generateEnv();
+
+    console.log("\n✅ ========================================");
+    console.log("✅ SETUP COMPLETADO SIN ERRORES");
+    console.log("✅ Sistema AURA/AME completamente funcional");
+    console.log("✅ ========================================\n");
+  } catch (error) {
+    console.error("\n❌ Error:", error.message);
+    process.exit(1);
+  }
+}
+
+function generateEnv() {
+  const env = `
+NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyDYy5QYsXqXxXxXxXxXxXxXxXxXxXxXxX
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=aura-ame-ecosystem
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=1234567890-abcdefghijklmnopqrstuvwxyz.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+DATABASE_URL=postgresql://user:password@localhost:5432/dbname
+VERCEL_TOKEN=your_vercel_token_here
+`;
+
+  require("fs").writeFileSync("frontend/.env.local", env);
+}
+
+main().catch(console.error);

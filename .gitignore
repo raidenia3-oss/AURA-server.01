@@ -1,0 +1,173 @@
+# ============================================
+# AURA/AME ECOSYSTEM — .gitignore DEFINITIVO
+# ============================================
+
+# ─── Entornos Virtuales Python ───
+.venv*/
+venv*/
+env*/
+ENV/
+.venv/
+venv/
+env/
+venv_decision_core/
+env.bak/
+venv.bak/
+
+# ─── Node.js ───
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─── Python ───
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+*.whl
+dist/
+build/
+*.so
+
+# ─── Variables de Entorno y Config Local ───
+.env
+.env.local
+.env.backup
+.env.*.local
+config.local.yml
+aura_urls.json
+aura_status.json
+health_check_results.json
+network_status.json
+config_models.json
+
+# ─── Bases de Datos ───
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.sql
+
+# ─── IDE / Editor ───
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# ─── Android / Gradle ───
+.gradle/
+app/build/
+build/
+local.properties
+*.apk
+*.aab
+*.dex
+*.jar
+*.aar
+*.so
+*.jks
+*.keystore
+
+# ─── Archivos Binarios / Multimedia Pesados ───
+*.mp4
+*.mp3
+*.wav
+*.flac
+*.ogg
+*.mov
+*.avi
+*.mkv
+*.webm
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.svg
+*.woff
+*.woff2
+*.ttf
+*.eot
+*.pdf
+*.zip
+*.tar
+*.gz
+*.7z
+*.rar
+
+# ─── Logs y Temporales ───
+*.log
+*.tmp
+*.bak
+*.old
+*.crash
+*.dmp
+*.pid
+*.seed
+*.pid.lock
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ─── Godot Engine ───
+godot_game/.godot/
+godot_game/project.godot.lock
+godot_game/import/
+
+# ─── Docker ───
+docker-data/
+.docker/
+
+# ─── Navegadores / Automatización ───
+chromedriver*.exe
+geckodriver*.exe
+selenium/
+
+# ─── Ollama / Modelos Locales ───
+ollama_data/
+models/
+
+# ─── Vercel / Tokens ───
+vercel-token.txt
+
+# ─── Cloudflare ───
+.cloudflared/
+cloudflared/config.yml
+
+# ─── MobSF ───
+mobsf_data/
+downloads/
+
+# ─── Otros ───
+ame_config.json
+credentials.json
+temp_payload*.json
+verification_report*.txt
+final_success_report.txt
+processes_all.txt
+geo_coordinates.json
+
+# ─── Incluir directorios vacíos ───
+!godot_game/assets/.gitkeep
+!godot_game/scenes/.gitkeep
+!godot_game/autoloads/.gitkeep
+!godot_game/scripts/.gitkeep
+nul
+C:UsersUserDownloadsJARVISjarvis_hrz.py
+
+# Traffic generated output
+ame-backend/src/traffic/output/
+.vercel
+.env*
+
+.next
+frontend/.next
+

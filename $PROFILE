@@ -1,0 +1,2 @@
+# direnv hook for PowerShell
+Invoke-Expression "$(direnv hook powershell)"

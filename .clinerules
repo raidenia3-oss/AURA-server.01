@@ -1,0 +1,51 @@
+---
+# ARQUITECTURA DE SOFTWARE AURA - REGLAS DE OPERACIÓN
+# ======================================================
+
+## 1. RESTRICCIÓN DE ENTORNO
+- **Sistema Operativo:** Windows nativo.
+- **Shell Principal:** Git Bash (evitar comandos exclusivos de Linux como `sudo`, `apt-get`, rutas estilo `/var/log/`).
+- **Rutas:** Usar rutas de Windows (ej: `C:\Users\...` o `./ruta/relativa`).
+
+## 2. ARQUITECTURA DEL PROYECTO
+- **Ecosistema Dual:**
+  - **AURA Core:** Backend en Python con FastAPI (carpeta `AURA_Core`).
+  - **AME App:** Frontend móvil en Android Studio con Gradle (carpeta `AME_ECOSYSTEM/ame_app_android`).
+- **Sincronización:** Ambos componentes deben mantener coherencia en endpoints, modelos de datos y configuraciones.
+
+## 3. MITIGACIÓN DE ERRORES (NO-DESTRUCCIÓN)
+- **Análisis Previo:** Antes de modificar scripts de conexión o endpoints, leer el archivo completo.
+- **No Asumir Código:** No dejar funciones a medias ni suponer funcionalidad existente.
+- **Validación:** Usar `print()` o logs para verificar estados intermedios en scripts críticos.
+
+## 4. AUDITORÍA VISUAL
+- **Etiquetas TODO:** Usar comentarios estandarizados:
+  - Python: `# TODO: [Descripción breve]`
+  - Java/Kotlin: `// TODO: [Descripción breve]`
+- **Herramientas:** Aprovechar extensiones como "Todo Tree" en VS Code para supervisar tareas pendientes.
+
+## 5. SINCRONIZACIÓN DE AUTOMATION SHELL
+- **Configuración de VS Code:**
+  - El terminal integrado debe usar Git Bash como shell predeterminado.
+  - Verificar que scripts como `./gradlew assembleDebug` y comandos de Python (`python script.py`) se ejecuten bajo Git Bash.
+
+## 6. PROTOCOLOS DE SEGURIDAD
+- **Endpoints:** Validar que todos los endpoints de AURA Core estén documentados en `AURA_Core/api_routes.py`.
+- **Autenticación:** Usar tokens o claves API almacenados en `.env` o `config.json`.
+
+## 7. DEPENDENCIAS
+- **Python:** Usar `requirements.txt` para instalar librerías con `pip`.
+- **Android:** Usar `build.gradle` para gestionar dependencias de Gradle.
+
+---
+
+# MAPA DE CARPETAS PRINCIPALES
+
+- **AURA_Core:** Backend (Python/FastAPI).
+- **AME_ECOSYSTEM:** Frontend móvil (Android).
+- **Shadow-Core:** Componentes de seguridad y red.
+- **AME_Core:** Lógica central de la aplicación móvil.
+- **scripts:** Scripts de automatización y utilidades.
+- **Setup:** Scripts de configuración inicial.
+- **AME-termux:** Componentes para Termux.
+- **AME_EXPORT_PACKAGE:** Paquetes exportables (APK, Termux, etc.).
