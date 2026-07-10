@@ -1,7 +1,21 @@
+/** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  swcMinify: true,
-  images: { unoptimized: true },
+  async rewrites() {
+    return [
+      {
+        source: '/ame',
+        destination: '/ame',
+      },
+      {
+        source: '/ame/:path*',
+        destination: '/ame/:path*',
+      },
+      {
+        source: '/api/health',
+        destination: '/api/health',
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;

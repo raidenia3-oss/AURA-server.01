@@ -1,1 +1,1 @@
-{"projectId":"prj_Otf2HZ3HlKpSiHusue6xlSYaemun","orgId":"team_8PMWBSy1VX84iGacHeib3pxp","projectName":"aura-web-static"}
+{"settings":{"createdAt":1782594326508,"framework":"nextjs","devCommand":null,"installCommand":null,"buildCommand":"npm run build","outputDirectory":".next","rootDirectory":"frontend","directoryListing":false,"nodeVersion":"24.x"}} 
