@@ -3,6 +3,11 @@
     "displayName": "AURA Sentinel Agent",
     "description": "Agente autónomo de código sin restricciones y sistema de respaldo (Watcher) que supervisa a otros agentes como Cline para intervenir cuando se quedan sin tokens o se detienen.",
     "version": "1.0.0",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/raidenia3-oss/AURA-server.01.git"
+    },
     "engines": {
         "vscode": "^1.85.0"
     },
@@ -14,7 +19,7 @@
         "onView:auraSentinelPanel",
         "onStartupFinished"
     ],
-    "main": "./src/extension.js",
+    "main": "./dist/extension.js",
     "contributes": {
         "viewsContainers": {
             "activitybar": [
@@ -105,8 +110,8 @@
         ]
     },
     "scripts": {
-        "compile": "tsc -p ./src",
-        "watch": "tsc -w -p ./src",
+        "compile": "tsc -p ./",
+        "watch": "tsc -w -p ./",
         "package": "vsce package"
     },
     "dependencies": {

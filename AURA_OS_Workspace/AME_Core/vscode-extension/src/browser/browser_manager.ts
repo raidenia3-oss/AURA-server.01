@@ -55,7 +55,9 @@ export class BrowserManager {
             console.log("[BrowserManager] Navegador lanzado correctamente.");
         } catch (error) {
             console.error("[BrowserManager] Error al lanzar navegador:", error);
-            throw new Error(`No se pudo iniciar el navegador automatizado: ${error.message}`);
+            throw new Error(
+                `No se pudo iniciar el navegador automatizado: ${error instanceof Error ? error.message : String(error)}`,
+            );
         }
     }
 
@@ -69,7 +71,7 @@ export class BrowserManager {
             console.log(`[BrowserManager] Navegado a: ${url}`);
         } catch (error) {
             console.error(`[BrowserManager] Error navegando a ${url}:`, error);
-            throw new Error(`Error navegando a ${url}: ${error.message}`);
+            throw new Error(`Error navegando a ${url}: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 
@@ -83,7 +85,7 @@ export class BrowserManager {
             return result;
         } catch (error) {
             console.error("[BrowserManager] Error ejecutando script:", error);
-            throw new Error(`Error ejecutando script: ${error.message}`);
+            throw new Error(`Error ejecutando script: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 
@@ -97,7 +99,7 @@ export class BrowserManager {
             console.log(`[BrowserManager] Captura guardada en: ${path}`);
         } catch (error) {
             console.error("[BrowserManager] Error tomando captura:", error);
-            throw new Error(`Error tomando captura: ${error.message}`);
+            throw new Error(`Error tomando captura: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 
