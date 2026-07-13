@@ -1,7 +1,19 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
+import rateLimit from "../../../lib/rateLimit";
+import { authenticate } from "../../../lib/authenticate";
 
-export async function POST(request: Request) {
+const limiter = rateLimit(10, 60 * 1000); // 10 requests per minute
+
+export async function POST(request: NextRequest) {
+  const authResult = authenticate(request);
+  if (authResult) {
+    return authResult;
+  }
+
+  if (!limiter(request, NextResponse)) {
+    return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
+  }
   try {
     const { prompt } = await request.json();
 
