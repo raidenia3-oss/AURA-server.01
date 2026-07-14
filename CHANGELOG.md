@@ -5,6 +5,33 @@ All notable changes to AURA/AME will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.0.0] - 2026-07-14
+
+### Added
+
+- 📊 **Analytics Dashboard** (`/analytics`)
+  - Eventos totales, integraciones OK (x/5), webhooks, errores y latencia promedio
+  - Gráfico por categoría de eventos (sin dependencias externas)
+  - Lista de eventos recientes con timestamps
+  - Banner de error + botón Reintentar (reutiliza `fetchWithRetry`)
+  - Consume endpoints existentes: `/api/logs`, `/api/integrations/status`
+
+### Improved
+
+- v3.0 = v2.0 + Analytics Dashboard web funcional
+- Cero dependencias nuevas (reutiliza `fetchWithRetry`, paleta AURA)
+
+### Technical
+
+- Verificado localmente: `npm run typecheck` ✓, `npm run lint:local` ✓, `npm test` ✓
+- Quality gate: 7 passed / 3 skipped
+
+### Status
+
+- **Production Ready (web):** Next.js app + 5 integraciones + Analytics
+- **Scaffold documentado:** React Native, Fine-tuning, Analytics engine (ver `README-ROADMAP.md`)
+- Listo para Fase 58 cuando el agente Cline esté disponible
+
 ## [2.0.0] - 2026-07-13
 
 ### Added
