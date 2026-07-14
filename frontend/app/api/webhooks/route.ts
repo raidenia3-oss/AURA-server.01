@@ -1,10 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WebhookManager } from "../../../lib/webhook-manager";
 import logger from "../../../lib/logger";
+import { requireAuth } from "../../../lib/requireAuth";
 
 export const runtime = "nodejs";
 
+function isBlockedUrl(urlStr: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(urlStr);
+  } catch {
+    return true;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return true;
+  const host = u.hostname.toLowerCase();
+  if (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "0.0.0.0" ||
+    host === "::1" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local")
+  ) {
+    return true;
+  }
+  if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) {
+    return true;
+  }
+  return false;
+}
+
 export async function GET(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth) return auth;
+
   const url = new URL(request.url);
   const action = url.searchParams.get("action");
 
@@ -25,10 +54,22 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth) return auth;
+
   try {
     const body = await request.json();
 
     if (body.id && body.url && body.events) {
+      if (isBlockedUrl(body.url)) {
+        logger.warn("webhooks", "blocked private/loopback url", {
+          url: body.url,
+        });
+        return NextResponse.json(
+          { error: "URL not allowed (private or loopback address)" },
+          { status: 400 },
+        );
+      }
       const result = WebhookManager.register(body.id, body.url, body.events);
       logger.event("webhook registered", {
         id: body.id,
@@ -44,13 +85,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, results });
     }
 
-    logger.warn(
-      "webhooks",
-      "invalid payload",
-      { id: body.id, event: body.event },
-    );
+    logger.warn("webhooks", "invalid payload", {
+      id: body.id,
+      event: body.event,
+    });
     return NextResponse.json(
-      { error: "Invalid payload. Expected { id, url, events } or { event, data }" },
+      {
+        error:
+          "Invalid payload. Expected { id, url, events } or { event, data }",
+      },
       { status: 400 },
     );
   } catch (error) {
@@ -60,18 +103,24 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth) return auth;
+
   try {
     const url = new URL(request.url);
     const id = url.searchParams.get("id");
 
     if (!id) {
-      return NextResponse.json({ error: "Missing id parameter" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing id parameter" },
+        { status: 400 },
+      );
     }
 
     const result = WebhookManager.unregister(id);
     return NextResponse.json({ success: true, result });
-    } catch (error) {
-      logger.error("webhooks", "DELETE failed", error);
-      return NextResponse.json({ error: "Internal error" }, { status: 500 });
-    }
+  } catch (error) {
+    logger.error("webhooks", "DELETE failed", error);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
+}

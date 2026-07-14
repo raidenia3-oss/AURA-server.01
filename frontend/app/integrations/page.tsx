@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { palette } from "../../components/palette";
+import { fetchWithRetry } from "../../lib/fetch-retry";
 import IntegrationCard, {
   Integration,
 } from "../../components/IntegrationCard";
@@ -65,6 +66,7 @@ const integrations: Integration[] = [
 
 export default function IntegrationsPage() {
   const [status, setStatus] = useState<StatusShape | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [activity, setActivity] = useState<ActivityEvent[]>([
     {
       time: "hace 2 min",
@@ -86,11 +88,17 @@ export default function IntegrationsPage() {
     },
   ]);
 
-  const loadStatus = () => {
-    fetch("/api/integrations/status")
-      .then((r) => r.json())
-      .then((data: StatusShape) => setStatus(data))
-      .catch(() => setStatus(null));
+  const loadStatus = async () => {
+    setStatusError(null);
+    try {
+      const res = await fetchWithRetry("/api/integrations/status");
+      const data: StatusShape = await res.json();
+      setStatus(data);
+    } catch (e) {
+      setStatusError(
+        e instanceof Error ? e.message : "No se pudo cargar el estado",
+      );
+    }
   };
 
   useEffect(() => {
@@ -164,6 +172,41 @@ export default function IntegrationsPage() {
           Conecta AME con tus plataformas favoritas
         </p>
       </div>
+
+      {statusError && (
+        <div
+          style={{
+            background: "rgba(220, 20, 60, 0.12)",
+            border: `1px solid ${palette.border}`,
+            borderRadius: "8px",
+            padding: "15px 20px",
+            marginBottom: "30px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ color: palette.border, fontWeight: 700 }}>
+            ⚠️ No se pudo cargar el estado: {statusError}
+          </span>
+          <button
+            onClick={loadStatus}
+            style={{
+              background: palette.border,
+              color: palette.text,
+              border: "none",
+              padding: "8px 16px",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontWeight: 700,
+            }}
+          >
+            🔄 Reintentar
+          </button>
+        </div>
+      )}
 
       <div
         style={{
