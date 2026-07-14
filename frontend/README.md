@@ -1,7 +1,7 @@
-# AURA/AME v2.0 — Asistente IA Empresarial
+# AURA/AME v3.0 — Asistente IA Empresarial
 
-> Dashboard de integraciones empresariales para AME, con seguridad endurecida,
-> monitoreo 24/7 y calidad de código verificable.
+> Dashboard de integraciones empresariales para AME, con analytics, seguridad
+> endurecida, monitoreo 24/7 y calidad de código verificable.
 
 ## Qué es
 
@@ -13,18 +13,84 @@ conecta AME con las plataformas de tu equipo:
 - ✈️ **Telegram** — chat directo con el bot
 - 👥 **Microsoft Teams** — app para equipos
 - 🔗 **Webhooks Custom** — integración vía `POST /api/webhooks`
+- 📊 **Analytics Dashboard** — `/analytics` (eventos, integraciones, latencia)
 
-## Features
+## 🎯 Features
 
-- 🎨 **Dashboard de integraciones** en `/integrations` (status dinámico,
-  comandos, creación de webhooks, gestión de API key).
-- 🔐 **Auth en APIs sensibles** (`/api/webhooks`, `/api/logs`) vía bearer
-  `API_SECRET_KEY`.
-- 🛡️ **Validación SSRF** en las URLs de webhook (bloquea loopback/privadas).
-- ⚡ **Monitoreo 24/7** (`scripts/monitor-24-7.js`) con alertas automáticas.
-- 📝 **Logging exhaustivo** (`lib/logger.js`) expuesto en `GET /api/logs`.
-- 🔄 **Retry automático** con exponential backoff (`lib/fetch-retry.ts`).
-- ⚠️ **Error boundary** + ⏳ **loading skeleton** en `/integrations`.
+### 🔗 5 Enterprise Integrations
+
+1. **Slack** — usa `/ame analyze <texto>` en cualquier canal.
+   ```bash
+   /ame analyze "What's the best approach for caching?"
+   → AME responde con el análisis
+   ```
+2. **Discord** — el bot responde al comando `/ame`.
+   ```
+   /ame What's my AME status?
+   → Respuesta con tarjeta
+   ```
+3. **Telegram** — interfaz de chat directo (`@ame_bot`).
+4. **Microsoft Teams** — app integrada al workspace (`@AURA` en chat).
+5. **Webhooks** — integraciones custom (ver API más abajo).
+
+### 📊 Analytics Dashboard (`/analytics`)
+
+- Seguimiento de eventos en tiempo real (consume `/api/logs`).
+- Monitoreo del estado de integraciones (`/api/integrations/status`).
+- Tasa de errores + latencia promedio de API.
+- Desglose de eventos por categoría + lista de eventos recientes.
+- Visita: `https://aura-web-chi-seven.vercel.app/analytics`
+
+### 🔐 Security Features
+
+- ✅ Autenticación bearer (`API_SECRET_KEY`) en `/api/webhooks` y `/api/logs`.
+- ✅ Validación SSRF en `/api/webhooks` (bloquea loopback/privadas).
+- ✅ CORS configurado para `/api/*`.
+- ✅ Logging centralizado (`/api/logs`).
+
+### ⚡ Developer Experience
+
+- Retry automático con exponential backoff (`lib/fetch-retry.ts`).
+- Error boundaries en UI + loading skeletons.
+- TypeScript estricto.
+- Tests con `node:test` (sin Jest/Playwright pesados).
+
+## 🚀 Quick Start
+
+### 1. Clone & Install
+
+```bash
+git clone https://github.com/raidenia3-oss/AURA-server.01.git
+cd AURA-server.01/frontend
+npm install
+```
+
+### 2. Configure Environment
+
+```bash
+cp .env.example .env.local
+# Edita .env.local con tus valores (ver sección Configuración)
+```
+
+### 3. Run Development
+
+```bash
+npm run dev
+# Abre http://localhost:3000
+```
+
+### 4. Visit Dashboards
+
+- **Integrations:** http://localhost:3000/integrations
+- **Analytics:** http://localhost:3000/analytics
+- **Health Check:** http://localhost:3000/api/health
+
+### 5. Deploy to Vercel
+
+```bash
+git push origin main
+# → Auto-deploy a https://aura-web-chi-seven.vercel.app
+```
 
 ## Instalación
 
@@ -49,7 +115,7 @@ npm test            # node --test (logger, webhook-manager, smoke)
 
 ## Configuración (variables de entorno)
 
-Crea `frontend/.env.local`:
+Crea `frontend/.env.local` (ver `frontend/.env.example`):
 
 ```bash
 # CORS: origen permitido para las rutas /api/*
@@ -73,20 +139,59 @@ NEXT_PUBLIC_API_URL=https://aura-web-chi-seven.vercel.app
 > `/api/webhooks` y `/api/logs` quedan abiertos (modo dev). En producción
 > define la variable para exigir el bearer token.
 
-## Uso — Endpoints
+## 📡 API Endpoints
 
-| Método | Ruta                       | Auth | Descripción                          |
-| ------ | -------------------------- | ---- | ------------------------------------ |
-| GET    | `/api/health`              | No   | Health check global                  |
-| GET    | `/api/integrations/status` | No   | Estado de cada integración           |
-| GET    | `/api/logs`                | Sí*  | Log de eventos/errores               |
-| GET    | `/api/webhooks`            | Sí*  | Lista webhooks                       |
-| POST   | `/api/webhooks`            | Sí*  | Registra/dispara webhook             |
-| DELETE | `/api/webhooks?id=<id>`    | Sí*  | Elimina webhook                      |
-| GET    | `/api/slack/install`       | No   | OAuth install de Slack               |
-| GET    | `/api/teams`               | No   | Info de la app Teams                 |
+### Health Check
 
-\* Requiere bearer `API_SECRET_KEY` solo cuando la variable está configurada.
+```bash
+GET /api/health
+# → {"ok":true,"timestamp":"...","routes":[...]}
+```
+
+### Webhooks
+
+```bash
+# Listar webhooks (requiere API_SECRET_KEY cuando está configurado)
+curl https://aura-web-chi-seven.vercel.app/api/webhooks \
+  -H "Authorization: Bearer $API_SECRET_KEY"
+
+# Registrar webhook (valida la URL y bloquea SSRF)
+curl -X POST https://aura-web-chi-seven.vercel.app/api/webhooks \
+  -H "Authorization: Bearer $API_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"id":"wh1","url":"https://your-service.com/webhook","events":["message"]}'
+
+# Disparar webhooks suscritos a un evento
+curl -X POST https://aura-web-chi-seven.vercel.app/api/webhooks \
+  -H "Authorization: Bearer $API_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"event":"message","data":{"hello":1}}'
+
+# Eliminar
+curl -X DELETE "https://aura-web-chi-seven.vercel.app/api/webhooks?id=wh1" \
+  -H "Authorization: Bearer $API_SECRET_KEY"
+```
+
+### Logs
+
+```bash
+# Obtener logs (requiere API_SECRET_KEY cuando está configurado)
+curl "https://aura-web-chi-seven.vercel.app/api/logs?limit=100" \
+  -H "Authorization: Bearer $API_SECRET_KEY"
+
+# Respuesta:
+# { "logs": [ { "ts":"...", "level":"info", "category":"integration",
+#               "message":"...", "meta":null }, ... ] }
+```
+
+### Estado de integraciones
+
+```bash
+GET /api/integrations/status
+# → {"slack":{"connected":true},"discord":{"connected":true},
+#    "telegram":{"connected":true},"teams":{"connected":true},
+#    "webhooks":{"connected":false,"count":0}}
+```
 
 ## Seguridad
 
