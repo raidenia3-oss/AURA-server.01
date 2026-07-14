@@ -24,6 +24,8 @@ export async function GET() {
       "/api/slack/install",
       "/api/health",
       "/api/ame-core",
+      "/integrations",
+      "/api/integrations/status",
     ],
   };
   const res = NextResponse.json(body);
