@@ -60,34 +60,8 @@ const integrations: Integration[] = [
     commands: ["POST /api/webhooks"],
     installLabel: "Crear Webhook",
     configureLabel: "Gestionar Webhooks",
-    onClick: createWebhook,
   },
 ];
-
-function createWebhook() {
-  const url = window.prompt("URL del endpoint para el webhook:");
-  if (!url) return;
-
-  fetch("/api/webhooks", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      id: `wh_${Date.now()}`,
-      url,
-      events: ["ame.event", "integration.message"],
-    }),
-  })
-    .then((r) => r.json())
-    .then((d) => {
-      if (d.success) {
-        window.alert("Webhook creado correctamente ✅");
-        window.location.reload();
-      } else {
-        window.alert("No se pudo crear el webhook: " + JSON.stringify(d));
-      }
-    })
-    .catch((e) => window.alert("Error: " + e.message));
-}
 
 export default function IntegrationsPage() {
   const [status, setStatus] = useState<StatusShape | null>(null);
@@ -112,12 +86,53 @@ export default function IntegrationsPage() {
     },
   ]);
 
-  useEffect(() => {
+  const loadStatus = () => {
     fetch("/api/integrations/status")
       .then((r) => r.json())
       .then((data: StatusShape) => setStatus(data))
       .catch(() => setStatus(null));
+  };
+
+  useEffect(() => {
+    loadStatus();
   }, []);
+
+  const createWebhook = () => {
+    const url = window.prompt("URL del endpoint para el webhook:");
+    if (!url) return;
+
+    fetch("/api/webhooks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: `wh_${Date.now()}`,
+        url,
+        events: ["ame.event", "integration.message"],
+      }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) {
+          setActivity((prev) => [
+            {
+              time: "ahora",
+              integration: "Webhooks",
+              message: `Webhook creado (${url})`,
+              status: "success",
+            },
+            ...prev,
+          ]);
+          loadStatus();
+        } else {
+          window.alert("No se pudo crear el webhook: " + JSON.stringify(d));
+        }
+      })
+      .catch((e) => window.alert("Error: " + e.message));
+  };
+
+  const list = integrations.map((i) =>
+    i.name === "Webhooks Custom" ? { ...i, onClick: createWebhook } : i,
+  );
 
   const isConnected = (name: string): boolean => {
     if (!status) return false;
@@ -158,7 +173,7 @@ export default function IntegrationsPage() {
           marginBottom: "50px",
         }}
       >
-        {integrations.map((integration) => (
+        {list.map((integration) => (
           <IntegrationCard
             key={integration.name}
             integration={integration}

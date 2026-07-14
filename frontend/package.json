@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc -p tsconfig.local.json --noEmit",
+    "lint:local": "eslint -c eslint.local.mjs ."
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
