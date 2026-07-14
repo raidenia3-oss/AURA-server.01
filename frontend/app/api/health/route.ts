@@ -27,6 +27,7 @@ export async function GET() {
       "/integrations",
       "/api/integrations/status",
       "/api/logs",
+      "/analytics",
     ],
   };
   const res = NextResponse.json(body);
