@@ -1,36 +1,131 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AURA/AME v2.0 — Asistente IA Empresarial
 
-## Getting Started
+> Dashboard de integraciones empresariales para AME, con seguridad endurecida,
+> monitoreo 24/7 y calidad de código verificable.
 
-First, run the development server:
+## Qué es
+
+AURA/AME es un asistente IA con un dashboard web (Next.js App Router) que
+conecta AME con las plataformas de tu equipo:
+
+- 💬 **Slack** — comandos `/ame analyze`, `/ame news`
+- 🎮 **Discord** — bot con comando `/ame`
+- ✈️ **Telegram** — chat directo con el bot
+- 👥 **Microsoft Teams** — app para equipos
+- 🔗 **Webhooks Custom** — integración vía `POST /api/webhooks`
+
+## Features
+
+- 🎨 **Dashboard de integraciones** en `/integrations` (status dinámico,
+  comandos, creación de webhooks, gestión de API key).
+- 🔐 **Auth en APIs sensibles** (`/api/webhooks`, `/api/logs`) vía bearer
+  `API_SECRET_KEY`.
+- 🛡️ **Validación SSRF** en las URLs de webhook (bloquea loopback/privadas).
+- ⚡ **Monitoreo 24/7** (`scripts/monitor-24-7.js`) con alertas automáticas.
+- 📝 **Logging exhaustivo** (`lib/logger.js`) expuesto en `GET /api/logs`.
+- 🔄 **Retry automático** con exponential backoff (`lib/fetch-retry.ts`).
+- ⚠️ **Error boundary** + ⏳ **loading skeleton** en `/integrations`.
+
+## Instalación
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/raidenia3-oss/AURA-server.01.git
+cd AURA-server.01/frontend
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Desarrollo local
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+El `package.json` fija `next` en una versión antigua para el entorno de
+despliegue, pero el código usa APIs modernas de Next (App Router,
+`next/server`). Por eso los comandos estándar `npm run lint` / `tsc` fallan
+localmente. Usa en su lugar los scripts de verificación local:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run typecheck   # tsc -p tsconfig.local.json --noEmit (con shims)
+npm run lint:local  # eslint -c eslint.local.mjs .
+npm test            # node --test (logger, webhook-manager, smoke)
+```
 
-## Learn More
+## Configuración (variables de entorno)
 
-To learn more about Next.js, take a look at the following resources:
+Crea `frontend/.env.local`:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+# CORS: origen permitido para las rutas /api/*
+NEXT_PUBLIC_SITE_URL=https://aura-web-chi-seven.vercel.app
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Bearer secret para /api/webhooks y /api/logs (si no está seteado, quedan abiertos en dev)
+API_SECRET_KEY=tu_secret_key_aqui
 
-## Deploy on Vercel
+# Integraciones (cada una enciende su status cuando está presente)
+SLACK_CLIENT_ID=xoxb-...
+SLACK_REDIRECT_URI=https://tu-app/api/slack/install
+DISCORD_TOKEN=...
+TELEGRAM_TOKEN=...
+TEAMS_APP_ID=...
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+# Monitoreo 24/7
+NEXT_PUBLIC_API_URL=https://aura-web-chi-seven.vercel.app
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> **Nota de seguridad:** cuando `API_SECRET_KEY` NO está configurado,
+> `/api/webhooks` y `/api/logs` quedan abiertos (modo dev). En producción
+> define la variable para exigir el bearer token.
+
+## Uso — Endpoints
+
+| Método | Ruta                       | Auth | Descripción                          |
+| ------ | -------------------------- | ---- | ------------------------------------ |
+| GET    | `/api/health`              | No   | Health check global                  |
+| GET    | `/api/integrations/status` | No   | Estado de cada integración           |
+| GET    | `/api/logs`                | Sí*  | Log de eventos/errores               |
+| GET    | `/api/webhooks`            | Sí*  | Lista webhooks                       |
+| POST   | `/api/webhooks`            | Sí*  | Registra/dispara webhook             |
+| DELETE | `/api/webhooks?id=<id>`    | Sí*  | Elimina webhook                      |
+| GET    | `/api/slack/install`       | No   | OAuth install de Slack               |
+| GET    | `/api/teams`               | No   | Info de la app Teams                 |
+
+\* Requiere bearer `API_SECRET_KEY` solo cuando la variable está configurada.
+
+## Seguridad
+
+- ✅ **Webhooks protegidos** por API key (cuando `API_SECRET_KEY` está seteado).
+- ✅ **Validación SSRF** en `/api/webhooks` (rechaza `localhost`, `127.0.0.1`,
+  `0.0.0.0`, `::1`, `.local` y rangos `10.x` / `192.168.x` / `172.16-31.x` /
+  `169.254.x`).
+- ✅ **CORS** configurado en `next.config.js` para `/api/*`.
+- ✅ **Logs protegidos** con el mismo bearer.
+- ⚠️ **Rate limiting** implementado en `ame-core` (`lib/rateLimit.ts`); aún no
+  está aplicado a las rutas de integraciones (ver `MEJORAS-FASE-57.md`).
+
+## Testing
+
+```bash
+npm test          # node:test (logger + webhook-manager + smoke HTTP)
+npm run typecheck # verificación de tipos local
+npm run lint:local# lint local (parser @typescript-eslint)
+```
+
+Los smoke tests HTTP solo corren si defines `BASE_URL` (p.ej. contra un
+despliegue vivo); se skipean localmente.
+
+## Deployment
+
+Despliegue automático en Vercel al hacer push a `main` (rootDirectory:
+`frontend`).
+
+```bash
+git push origin main
+# → Auto-deploy a https://aura-web-chi-seven.vercel.app
+```
+
+## Monitoreo
+
+```bash
+node scripts/monitor-24-7.js
+```
+
+Verifica `/api/health`, `/api/integrations/status`, `/api/webhooks` y
+`/api/ame-core` cada 5 minutos y alerta si algo falla. El script no arranca
+solo al importarse (solo con `require.main === module`).

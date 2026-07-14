@@ -91,6 +91,26 @@ Usa [Conventional Commits](https://www.conventionalcommits.org/):
 - Agrega tests para nuevas funcionalidades
 - Mantén cobertura de código > 80%
 
+## Verificación local (antes de PR)
+
+El entorno fija `next` en una versión antigua, así que los comandos estándar
+`npm run lint` / `tsc` fallan. Usa los scripts locales:
+
+```bash
+cd frontend
+npm run typecheck   # tsc -p tsconfig.local.json --noEmit
+npm run lint:local  # eslint -c eslint.local.mjs .
+npm test            # node --test
+```
+
+## Seguridad
+
+- **Nunca** hagas commit de API keys ni secrets (usa `.env.local`).
+- Valida siempre los inputs, especialmente URLs externas (ver SSRF guard en
+  `app/api/webhooks/route.ts`).
+- Usa `authenticate` / `requireAuth` en cualquier API sensible.
+- Aplica rate limiting a funciones costosas (ver `lib/rateLimit.ts`).
+
 ## Documentación
 
 - Actualiza `README.md` si agregas funcionalidades
