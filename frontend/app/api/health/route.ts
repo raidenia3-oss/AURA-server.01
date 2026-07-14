@@ -26,6 +26,7 @@ export async function GET() {
       "/api/ame-core",
       "/integrations",
       "/api/integrations/status",
+      "/api/logs",
     ],
   };
   const res = NextResponse.json(body);

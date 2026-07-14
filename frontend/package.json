@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc -p tsconfig.local.json --noEmit",
-    "lint:local": "eslint -c eslint.local.mjs ."
+    "lint:local": "eslint -c eslint.local.mjs .",
+    "test": "node --test \"tests/*.mjs\""
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
