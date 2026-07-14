@@ -1,0 +1,40 @@
+# Phase 58 Dependencies (backend: fine-tuning + analytics engine)
+
+# Core
+python>=3.10
+pip>=22.0
+
+# Deep Learning
+torch==2.0.0
+transformers==4.30.0
+huggingface-hub==0.16.0
+peft==0.4.0  # Parameter-Efficient Fine-Tuning
+
+# Data Processing
+pandas==2.0.0
+numpy==1.24.0
+scikit-learn==1.3.0
+
+# Analytics & ML
+statsmodels==0.14.0
+prophet==1.1.5  # Time series forecasting
+scipy==1.11.0
+
+# APIs & Utilities
+httpx==0.24.0
+python-dotenv==1.0.0
+
+# Database
+sqlalchemy==2.0.0
+psycopg2-binary==2.9.0  # PostgreSQL
+redis==4.5.0
+
+# Audio & Vision
+elevenlabs==0.2.0        # Text-to-Speech
+google-cloud-vision==3.4.0
+google-cloud-speech==2.20.0
+
+# Development
+pytest==7.4.0
+black==23.7.0
+mypy==1.4.0
