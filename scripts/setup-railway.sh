@@ -9,20 +9,21 @@ BACKEND_DIR="backend"
 
 # Crear servicio de PostgreSQL en Railway
 echo "Creando servicio de PostgreSQL en Railway..."
-POSTGRES_SERVICE=$(railway create postgres --name aura-postgres --region la --addon)
+railway addons create postgres --name aura-postgres
 
-# Obtener la URL de la base de datos
-DATABASE_URL=$(railway get $POSTGRES_SERVICE --json | jq -r '.addonConfig.connectionString')
+# Obtener la URL de la base de datos (el addon expone DATABASE_URL como variable)
+echo "Obteniendo DATABASE_URL..."
+DATABASE_URL=$(railway variables get DATABASE_URL)
 
 # Actualizar .env con la URL de la base de datos
 echo "Actualizando DATABASE_URL en .env..."
 echo "DATABASE_URL=$DATABASE_URL" > $BACKEND_DIR/.env
-echo "QWEN_ENDPOINT=https://raiden456-slut.hf.space" >> $BACKEND_DIR/.env
+echo "QWEN_URL=https://raiden456-slut.hf.space/v1/chat/completions" >> $BACKEND_DIR/.env
 echo "HF_TOKEN=tu_token_hf" >> $BACKEND_DIR/.env
 
-# Desplegar el backend a Railway
+# Inicializar el proyecto (build/start se definen en railway.toml)
 echo "Desplegando backend a Railway..."
-railway init $PROJECT_NAME --build-command="pip install -r $BACKEND_DIR/requirements.txt" --start-command="uvicorn $BACKEND_DIR.main:app --host 0.0.0.0 --port $PORT" --region la
+railway init --service "$PROJECT_NAME"
 
 # Obtener la URL del backend
 BACKEND_URL=$(railway get $PROJECT_NAME --json | jq -r '.deployments[0].url')

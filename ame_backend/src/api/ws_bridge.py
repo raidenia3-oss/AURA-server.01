@@ -14,7 +14,11 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/ws", tags=["ws_bridge"])
 
-SECRET = os.getenv("BRIDGE_SECRET", "ame-bridge-local-secret")
+SECRET = os.getenv("BRIDGE_SECRET")
+if not SECRET:
+    raise RuntimeError(
+        "BRIDGE_SECRET no configurado. Define la variable de entorno BRIDGE_SECRET."
+    )
 HEARTBEAT_TIMEOUT = int(os.getenv("BRIDGE_HEARTBEAT_TIMEOUT", "10"))
 MAX_RECONNECT_BACKOFF = int(os.getenv("BRIDGE_BACKOFF_MAX", "60"))
 STATE_DIR = Path(os.getenv("BRIDGE_STATE_DIR", "bridge_state"))

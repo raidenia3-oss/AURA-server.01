@@ -9,7 +9,7 @@ echo "1. Desplegando backend en Railway..."
 bash scripts/setup-railway.sh
 
 # Obtener la URL del backend
-BACKEND_URL=$(railway get aura-backend --json | jq -r '.deployments[0].url')
+BACKEND_URL=$(railway domain)
 
 # Desplegar frontend en Vercel
 echo "2. Desplegando frontend en Vercel..."
@@ -18,7 +18,7 @@ bash scripts/setup-vercel.sh
 
 # Configurar N8N
 echo "3. Configurando N8N..."
-export DATABASE_URL=$(railway get aura-postgres --json | jq -r '.addonConfig.connectionString')
+export DATABASE_URL=$(railway variables get DATABASE_URL)
 bash scripts/setup-n8n.sh
 
 echo "✅ Despliegue completado."

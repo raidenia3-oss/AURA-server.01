@@ -11,13 +11,21 @@ from datetime import datetime
 
 # ENV VARS
 DATABASE_URL = os.getenv("DATABASE_URL")
-QWEN_URL = "https://raiden456-slut.hf.space/v1/chat/completions"
+QWEN_URL = os.getenv("QWEN_URL", "https://raiden456-slut.hf.space/v1/chat/completions")
 FASTAPI_URL = os.getenv("FASTAPI_URL", "http://localhost:8000")
 
 
-# Conexión PostgreSQL
-def get_db():
-    return psycopg2.connect(DATABASE_URL)
+# Conexión PostgreSQL (con reintentos ante caídas transitorias)
+def get_db(retries=3, delay=2):
+    last_error = None
+    for attempt in range(retries):
+        try:
+            return psycopg2.connect(DATABASE_URL)
+        except Exception as e:
+            last_error = e
+            print(f"[AURA] Reintento {attempt + 1}/{retries} de conexión a DB: {e}")
+            time.sleep(delay)
+    raise last_error
 
 
 # Buscar noticias desde RSS

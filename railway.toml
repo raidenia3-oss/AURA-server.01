@@ -1,29 +1,8 @@
-[build]
-command = "pip install -r AME_Core/AME_Core/requirements.txt"
-
-[[services]]
-name = "aura-backend"
-port = 8000
-environment = {
-  ALLOWED_ORIGIN = "https://aura-frontend.vercel.app"
-  JWT_SECRET_KEY = "aura-secret-key-2026"
-  HF_SPACE_URL = "https://raiden456-slut.hf.space/v1"
-  RAILWAY_ENVIRONMENT = "production"
-  FLASK_ENV = "production"
-  PYTHONUNBUFFERED = "1"
-}
-build_command = "pip install -r AME_Core/AME_Core/requirements.txt"
-start_command = "python AME_Core/AME_Core/servidor_ame.py"
-healthcheck_path = "/api/status"
-healthcheck_timeout = 30
-auto_deploy = true
-
-[[services]]
-name = "aura-frontend"
-port = 3000
-environment = {
-  VITE_API_URL = "https://aura-backend.up.railway.app"
-}
-build_command = "cd AURA_Tactical_UI && npm install && npm run build"
-start_command = "serve -s AURA_Tactical_UI/dist -l 3000"
-static = true
+# Railway deployment configuration for the AURA backend.
+# Build/start commands live here instead of deprecated `railway init` flags.
+[deploy]
+buildCommand = "pip install -r backend/requirements.txt"
+startCommand = "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 100
+restartPolicyType = "on_failure"

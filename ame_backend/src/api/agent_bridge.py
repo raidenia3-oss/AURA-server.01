@@ -19,7 +19,11 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/bridge", tags=["agent_bridge"])
 
-SECRET = os.getenv("BRIDGE_SECRET", "ame-bridge-local-secret")
+SECRET = os.getenv("BRIDGE_SECRET")
+if not SECRET:
+    raise RuntimeError(
+        "BRIDGE_SECRET no configurado. Define la variable de entorno BRIDGE_SECRET."
+    )
 STATE_DIR = Path(os.getenv("BRIDGE_STATE_DIR", "bridge_state"))
 STATE_DIR.mkdir(exist_ok=True)
 STATE_FILE = STATE_DIR / "state.json"

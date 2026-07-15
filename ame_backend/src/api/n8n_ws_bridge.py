@@ -11,7 +11,11 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-SECRET = os.getenv("BRIDGE_SECRET", "ame-bridge-local-secret")
+SECRET = os.getenv("BRIDGE_SECRET")
+if not SECRET:
+    raise RuntimeError(
+        "BRIDGE_SECRET no configurado. Define la variable de entorno BRIDGE_SECRET."
+    )
 HEARTBEAT_TIMEOUT = int(os.getenv("BRIDGE_HEARTBEAT_TIMEOUT", "10"))
 MAX_RECONNECT_BACKOFF = int(os.getenv("BRIDGE_BACKOFF_MAX", "60"))
 

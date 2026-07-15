@@ -5,7 +5,12 @@ import time
 from typing import Optional
 import jwt  # PyJWT
 
-JWT_SECRET = os.getenv("JWT_SECRET", "ame-bridge-jwt-secret-key-change-in-production")
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError(
+        "JWT_SECRET no configurado. Define la variable de entorno JWT_SECRET "
+        "con un secreto fuerte y unico."
+    )
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRES_MINUTES = int(os.getenv("JWT_EXPIRES_MINUTES", "60"))
 

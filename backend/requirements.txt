@@ -1,0 +1,9 @@
+# Backend API + News Worker dependencies
+# Used by `uvicorn backend.main:app` and `python news_worker.py`
+requests
+psycopg2-binary
+feedparser
+schedule
+python-dotenv
+fastapi
+uvicorn
