@@ -29,4 +29,12 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Standalone CommonJS Node scripts (integration bots). require() is
+    // legitimate here and they must not be converted to ESM (no "type":"module").
+    files: ["**/*.js"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
 );

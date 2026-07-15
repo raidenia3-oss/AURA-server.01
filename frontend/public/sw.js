@@ -63,7 +63,7 @@ async function cacheFirst(request) {
       caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
     }
     return response;
-  } catch (e) {
+  } catch {
     return caches.match("/offline.html");
   }
 }
@@ -76,7 +76,7 @@ async function networkFirst(request) {
       caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
     }
     return response;
-  } catch (e) {
+  } catch {
     const cached = await caches.match(request);
     if (cached) return cached;
 

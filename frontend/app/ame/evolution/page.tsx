@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 
 export default function EvolutionDashboard() {
-  const [metrics, setMetrics] = useState([]);
+  const [, setMetrics] = useState([]);
 
   useEffect(() => {
     const loadMetrics = async () => {
@@ -10,7 +10,7 @@ export default function EvolutionDashboard() {
         const data = await fetch("/api/ame/evolution/metrics");
         const metrics = await data.json();
         setMetrics(metrics);
-      } catch (e) {
+      } catch {
         console.log("Métricas de evolución no disponibles");
       }
     };

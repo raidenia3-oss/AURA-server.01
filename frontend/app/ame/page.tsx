@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 
 export default function AMEDashboard() {
-  const [ames, setAmes] = useState([
+  const [ames] = useState([
     {
       id: 1,
       name: "AME Principal",

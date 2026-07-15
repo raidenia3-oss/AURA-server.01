@@ -43,11 +43,11 @@ class AutoLearningEngine {
     };
   }
 
-  async optimizeModel(patterns) {
+  async optimizeModel() {
     console.log("Optimizando modelo IA...");
   }
 
-  async acquireNewSkill(patterns) {
+  async acquireNewSkill() {
     console.log("Analizando nuevas habilidades...");
   }
 
