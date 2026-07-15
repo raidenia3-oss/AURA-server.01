@@ -9,11 +9,11 @@ BACKEND_DIR="backend"
 
 # Crear servicio de PostgreSQL en Railway
 echo "Creando servicio de PostgreSQL en Railway..."
-railway addons create postgres --name aura-postgres
+railway add --database postgres --json
 
-# Obtener la URL de la base de datos (el addon expone DATABASE_URL como variable)
+# Obtener la URL de la base de datos (el addon expone DATABASE_URL como variable del proyecto)
 echo "Obteniendo DATABASE_URL..."
-DATABASE_URL=$(railway variables get DATABASE_URL)
+DATABASE_URL=$(railway variable list --json | jq -r '.[] | select(.name=="DATABASE_URL") | .value')
 
 # Actualizar .env con la URL de la base de datos
 echo "Actualizando DATABASE_URL en .env..."
@@ -23,10 +23,10 @@ echo "HF_TOKEN=tu_token_hf" >> $BACKEND_DIR/.env
 
 # Inicializar el proyecto (build/start se definen en railway.toml)
 echo "Desplegando backend a Railway..."
-railway init --service "$PROJECT_NAME"
+railway init --name "$PROJECT_NAME"
 
 # Obtener la URL del backend
-BACKEND_URL=$(railway get $PROJECT_NAME --json | jq -r '.deployments[0].url')
+BACKEND_URL=$(railway domain)
 
 # Actualizar el workflow N8N con la URL del backend
 echo "Actualizando workflow N8N con la URL del backend..."

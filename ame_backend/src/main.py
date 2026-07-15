@@ -43,6 +43,14 @@ app.add_middleware(
 
 app.mount("/", telemetry_app)
 
+# Browser-control skill (optional; safe to skip if the module fails to load)
+try:
+    from ame_backend.src.api.skills_browser_control import router as browser_control_router
+
+    app.include_router(browser_control_router)
+except Exception as _exc:  # pragma: no cover - optional dependency
+    logger.warning("No se pudo montar el router browser-control: %s", _exc)
+
 
 @app.get("/health")
 def health() -> dict:

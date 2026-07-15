@@ -18,7 +18,7 @@ bash scripts/setup-vercel.sh
 
 # Configurar N8N
 echo "3. Configurando N8N..."
-export DATABASE_URL=$(railway variables get DATABASE_URL)
+export DATABASE_URL=$(railway variable list --json | jq -r '.[] | select(.name=="DATABASE_URL") | .value')
 bash scripts/setup-n8n.sh
 
 echo "✅ Despliegue completado."
