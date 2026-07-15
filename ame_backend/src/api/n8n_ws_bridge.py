@@ -55,18 +55,19 @@ class ReconnectBridge:
                 self._connect()
 
     def _connect(self):
-        with self._lock:
+        while True:
             try:
-                self.connected = True
-                self._last_heartbeat = time.time()
-                self._backoff = 1
-                self._set_status("connected")
+                with self._lock:
+                    self.connected = True
+                    self._last_heartbeat = time.time()
+                    self._backoff = 1
+                    self._set_status("connected")
+                return
             except Exception:
                 self.connected = False
                 self._set_status("reconnect")
                 self._backoff = min(self._backoff * 2, MAX_RECONNECT_BACKOFF)
                 time.sleep(self._backoff)
-                self._connect()
 
     def heartbeat(self):
         self._last_heartbeat = time.time()

@@ -115,13 +115,13 @@ async def ws_bridge(ws: WebSocket) -> None:
     reader_task = asyncio.create_task(reader())
     writer_task = asyncio.create_task(writer())
 
-    def emit_log(payload: str) -> None:
+    async def emit_log(payload: str) -> None:
         try:
             queue.put_nowait(payload)
         except Exception:
             pass
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     original_run_survey = getattr(task_mgr._solver, "solve_survey", None)
 
     async def patched_run_survey(start_url: str) -> None:

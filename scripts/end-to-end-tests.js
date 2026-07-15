@@ -178,10 +178,10 @@ class E2ETests {
       if (res.status === 200) {
         this.pass("✅ HF Space online");
       } else {
-        this.pass("⚠️ HF Space offline (using local fallback)");
+        this.fail("⚠️ HF Space offline (using local fallback)");
       }
     } catch (e) {
-      this.pass("⚠️ HF Space offline (using local fallback)");
+      this.fail(`⚠️ HF Space error: ${e.message} (using local fallback)`);
     }
   }
 

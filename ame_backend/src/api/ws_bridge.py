@@ -49,7 +49,7 @@ async def ws_bridge(
 
         # Verify token (JWT)
         try:
-            from auth_jwt import decode_token
+            from .auth_jwt import decode_token
 
             decode_token(token)
         except Exception:

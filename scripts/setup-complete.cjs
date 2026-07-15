@@ -1,8 +1,14 @@
 #!/usr/bin/env node
 
 const { execSync } = require("child_process");
-const BrowserMaster = require("../frontend/lib/browser-master");
-const FirebaseAutoSetup = require("../frontend/lib/firebase-setup-auto");
+
+let FirebaseAutoSetup;
+try {
+  FirebaseAutoSetup = require("../frontend/lib/firebase-setup-auto");
+} catch {
+  console.error("❌ Falta frontend/lib/firebase-setup-auto.js — ejecuta primero el setup de Firebase.");
+  process.exit(1);
+}
 
 async function main() {
   console.log("\n🚀 AURA/AME - Setup COMPLETO FINAL\n");

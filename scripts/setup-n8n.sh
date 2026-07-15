@@ -20,11 +20,11 @@ POSTGRES_CREDENTIALS=$(jq -n \
   '{
     "name": "AURA PostgreSQL",
     "type": "postgres",
-    "host": (.url | split("://")[1] | split("/")[0] | split(":")[0]),
-    "port": (.url | split("://")[1] | split("/")[0] | split(":")[1]),
-    "databaseName": (.url | split("://")[1] | split("/")[1]),
-    "username": (.url | split("://")[1] | split(":")[0] | split("@")[0]),
-    "password": (.url | split("://")[1] | split(":")[0] | split("@")[1] | split(":")[0])
+    "username": (.url | split("://")[1] | split(":")[0]),
+    "password": (.url | split("://")[1] | split(":")[1] | split("@")[0]),
+    "host":    (.url | split("@")[1] | split("/")[0] | split(":")[0]),
+    "port":    (.url | split("@")[1] | split("/")[0] | split(":")[1]),
+    "databaseName": (.url | split("/")[1])
   }')
 
 curl -X POST "$N8N_URL/rest/credentials" \

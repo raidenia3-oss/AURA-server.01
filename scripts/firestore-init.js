@@ -4,7 +4,13 @@
 const admin = require("firebase-admin");
 
 // Service account key (download from Firebase Console)
-const serviceAccount = require("../frontend/firebase-service-account.json");
+let serviceAccount;
+try {
+  serviceAccount = require("../frontend/firebase-service-account.json");
+} catch {
+  console.error("❌ Coloca firebase-service-account.json en frontend/ (descárgalo de Firebase Console).");
+  process.exit(1);
+}
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),

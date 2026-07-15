@@ -103,6 +103,8 @@ Retorna SOLO JSON (sin backticks):
 
             analysis = json.loads(text)
             return analysis
+
+        return {"tema": "unknown", "relevancia": 5, "por_que": "no-200", "keywords": []}
     except Exception as e:
         print(f"Error analizando: {e}")
         return {"tema": "unknown", "relevancia": 5, "por_que": "error", "keywords": []}

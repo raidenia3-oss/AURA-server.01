@@ -180,7 +180,7 @@ async function autoDeploy() {
 
 // MAIN
 const args = process.argv.slice(2);
-const cmd = args.join(" ").trim().toLowerCase();
+const cmd = (args[0] || "").toLowerCase().trim();
 
 if (!cmd || cmd === "auto") {
   autoDeploy().catch((e) => log(`FATAL: ${e.message}`));

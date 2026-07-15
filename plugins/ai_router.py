@@ -118,10 +118,10 @@ class GeminiAIProvider(AIProvider):
             return {"error": "Gemini API key not configured"}
 
         try:
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.config['api_key']}"
-            }
+            api_key = self.config.get("api_key", "")
+            endpoint = self.config["endpoint"]
+            url = f"{endpoint}?key={api_key}" if api_key else endpoint
+            headers = {"Content-Type": "application/json"}
 
             payload = {
                 "contents": [
@@ -134,7 +134,7 @@ class GeminiAIProvider(AIProvider):
             }
 
             response = requests.post(
-                self.config["endpoint"],
+                url,
                 json=payload,
                 headers=headers,
                 timeout=self.config.get("timeout", 15)
@@ -203,7 +203,7 @@ class AIRouter:
         if len(available) > 1:
             return random.choice(available)
 
-        return available[0] if available else "none"
+        return available[0]
 
     def generate(self, prompt: str, **kwargs) -> Dict[str, Any]:
         """

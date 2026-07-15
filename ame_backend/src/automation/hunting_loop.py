@@ -10,10 +10,10 @@ import logging
 import random
 from typing import List
 
-from src.config.targets import load_targets
-from automation.platform_adapters import PlatformAdapters
-from automation.survey_solver import SurveySolver
-from automation.financial_optimizer import FinancialOptimizer
+from ..config.targets import load_targets
+from .platform_adapters import PlatformAdapters
+from .survey_solver import SurveySolver
+from .financial_optimizer import FinancialOptimizer
 
 logger = logging.getLogger(__name__)
 
