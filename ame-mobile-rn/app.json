@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "AURA/AME Mobile",
+    "slug": "ame-mobile",
+    "version": "0.0.1",
+    "platforms": ["ios", "android", "web"],
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#080408"
+    },
+    "plugins": ["@react-native-firebase/app"]
+  }
+}

@@ -1,5 +1,12 @@
 # AURA/AME - Sistema Autónomo de Noticias y Automatización
 
+[![GitHub Release](https://img.shields.io/github/v/release/raidenia3-oss/AURA-server.01?style=flat-square&color=DC143C)](https://github.com/raidenia3-oss/AURA-server.01/releases)
+[![GitHub Stars](https://img.shields.io/github/stars/raidenia3-oss/AURA-server.01?style=flat-square)](https://github.com/raidenia3-oss/AURA-server.01)
+[![License](https://img.shields.io/github/license/raidenia3-oss/AURA-server.01?style=flat-square)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?style=flat-square)](https://www.typescriptlang.org/)
+[![Tests](https://img.shields.io/badge/Tests-7%20Passed-brightgreen?style=flat-square)]()
+[![Production Ready](https://img.shields.io/badge/Status-Production%20Ready-brightgreen?style=flat-square)]()
+
 ![AURA/AME Logo](https://via.placeholder.com/150x150?text=AURA+AME)
 
 AURA/AME es un ecosistema integrado para gestión autónoma de noticias, automatización de tareas y experiencia de usuario mejorada con integraciones avanzadas.
