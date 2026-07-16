@@ -3,20 +3,24 @@
 Write-Host "AURA Localhost Startup" -ForegroundColor Cyan
 Write-Host ""
 
-# Detectar IP local (WiFi)
-$ipLine = (ipconfig | Select-String "IPv4 Address" | Select-Object -First 1)
+# Detectar IP local (WiFi) - toma la primera IPv4 que no sea loopback
 $localIP = ""
-if ($ipLine) {
-    $localIP = ($ipLine.Line -replace '.*?:\s*' -replace '\s*$' -replace '[^0-9.]')
+try {
+    $adapters = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object { $_.InterfaceAlias -notmatch "Loopback" -and $_.IPAddress -ne "127.0.0.1" }
+    if ($adapters) { $localIP = $adapters[0].IPAddress }
+} catch {
+    $ipLine = (ipconfig | Select-String "IPv4 Address" | Select-Object -First 1)
+    if ($ipLine) { $localIP = ($ipLine.Line -replace '.*?:\s*' -replace '\s*$' -replace '[^0-9.]') }
 }
 
 Write-Host "Starting services..." -ForegroundColor Yellow
 Write-Host ""
 
-# 1. ame_backend en :8000
+# 1. ame_backend en :8000 (run as module so package imports resolve)
 Write-Host "Starting ame_backend (localhost:8000)..." -ForegroundColor Yellow
 $backendProcess = Start-Process -NoNewWindow -PassThru -FilePath "python" `
-    -ArgumentList "ame_backend/src/main.py" -WorkingDirectory $PWD
+    -ArgumentList "-m", "ame_backend.src.main" -WorkingDirectory $PWD
 Write-Host "  Backend PID: $($backendProcess.Id)" -ForegroundColor Green
 
 # Esperar a que el backend este listo
@@ -40,7 +44,7 @@ Write-Host "  Frontend (Local):  http://localhost:3000" -ForegroundColor White
 if ($localIP) { Write-Host "  Frontend (WiFi):   http://$localIP`:3000" -ForegroundColor White }
 Write-Host "  Backend  (Local):  http://localhost:8000" -ForegroundColor White
 if ($localIP) { Write-Host "  Backend  (WiFi):   http://$localIP`:8000" -ForegroundColor White }
-Write-Host "  Health Check:       http://localhost:8000/api/health" -ForegroundColor White
+Write-Host "  Health Check:       http://localhost:8000/health" -ForegroundColor White
 Write-Host ""
 Write-Host "Ctrl+C no detiene estos procesos. Para detenerlos:" -ForegroundColor Yellow
 Write-Host "  Stop-Process -Id $($backendProcess.Id), $($frontendProcess.Id) -Force" -ForegroundColor White

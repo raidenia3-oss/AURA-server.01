@@ -15,8 +15,21 @@ PostgreSQL (uses SQLite for local state). Vercel deployment is **untouched**.
 
 Then open:
 - Frontend: http://localhost:3000
-- Backend health: http://localhost:8000/api/health
+- Backend health: http://localhost:8000/health
 - WiFi (same network, from phone/tablet): http://<your-local-ip>:3000
+
+## Known local limitations
+
+- **Backend** must run as a package, not a script:
+  `python -m ame_backend.src.main` (the startup script already does this).
+  Its health route is `/health` (200) — there is no `/api/health`.
+- **Frontend cannot run locally with the currently installed `next@9.3.3`.**
+  The code uses the Next.js **App Router** (`app/`, `next/server`,
+  `next/font/google`), which requires Next 13+. `npm run dev` fails with
+  *"Couldn't find a `pages` directory"*. The frontend is deployed on Vercel,
+  which builds it with a modern Next version. To run the frontend locally you
+  must upgrade Next (`npm i next@latest`) — out of scope for this localhost
+  setup. The backend below runs fine standalone.
 
 ## How the frontend knows the backend URL
 
