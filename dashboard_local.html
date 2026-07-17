@@ -81,9 +81,9 @@
   <!-- CONFIGURACIÓN IP -->
   <div class="card">
     <h2>🔗 Conexión</h2>
-    <label for="ipInput">IP local del servidor AURA (puerto 8000)</label>
+    <label for="ipInput">IP/host del servidor AURA (puerto 8000) · deja vacío para usar el host actual</label>
     <div class="input-row">
-      <input type="text" id="ipInput" placeholder="ej: 192.168.1.100" value="192.168.1.100">
+      <input type="text" id="ipInput" placeholder="ej: 192.168.1.100 (vacío = host actual)">
       <button id="connectBtn">Conectar</button>
     </div>
     <div class="result-box pending" id="connectionStatus">Esperando conexión...</div>
@@ -135,9 +135,21 @@
   let BASE_URL = '';
 
   function getBaseUrl(){
-    const ip = ipInput.value.trim();
-    if(!ip) return '';
-    return `http://${ip}:8000`;
+    const raw = ipInput.value.trim();
+    if(raw){
+      return raw.startsWith('http') ? raw.replace(/\/+$/, '') : `http://${raw}:8000`;
+    }
+    if(window.location.origin && window.location.origin !== 'null'){
+      return window.location.origin;
+    }
+    return '';
+  }
+
+  function currentHostLabel(){
+    const raw = ipInput.value.trim();
+    if(raw) return raw;
+    try { return new URL(window.location.origin).host; }
+    catch(e){ return window.location.host || 'host actual'; }
   }
 
   async function fetchFrom(url, options={}){
@@ -173,7 +185,7 @@
       return false;
     }
     connectionStatus.className = 'result-box pending';
-    connectionStatus.textContent = 'Conectando...';
+    connectionStatus.textContent = `Conectando a ${currentHostLabel()} ...`;
     BASE_URL = base;
     try {
       const data = await fetchFrom(`${base}/health`);
@@ -181,7 +193,7 @@
       updateStatusGrid(data);
       return true;
     } catch(e){
-      showResult(connectionStatus, `No se pudo conectar a ${base}/health — ${e.message}`, true);
+      showResult(connectionStatus, `No se pudo conectar a ${currentHostLabel()} — ${e.message}`, true);
       updateStatusGrid(null);
       return false;
     }
@@ -247,9 +259,10 @@
 
   refreshBtn.addEventListener('click', testConnection);
 
-  // Auto-conectar al cargar si hay IP guardada
+  // Auto-conectar al cargar: usa el host actual (nube) o la IP guardada (local)
   const saved = localStorage.getItem('aura_local_ip');
-  if(saved){ ipInput.value = saved; testConnection(); }
+  if(saved){ ipInput.value = saved; }
+  testConnection();
   ipInput.addEventListener('change', () => localStorage.setItem('aura_local_ip', ipInput.value.trim()));
 
   document.getElementById('openDocs').addEventListener('click', e => {
