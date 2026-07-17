@@ -13,6 +13,19 @@ AURA/AME es un ecosistema integrado para gestión autónoma de noticias, automat
 
 ---
 
+## 🚀 v4.0.0 — Production-Grade
+
+- 🔐 **Admin Security** — JWT + RBAC + audit logging + rate limiting en `/api/admin/servers`
+- 🖥️ **Multi-Server** — framework `ServerAdapter` (Local / Vercel / Railway / AWS) con switch sin downtime
+- 📱 **React Native** (`ame-mobile-rn/`) — app nativa Expo + Firebase, offline-first
+- 🧠 **Fine-tuned AI** — `scripts/finetune-model.py` (Qwen2.5, LoRA, HuggingFace)
+- 📊 **Analytics Engine** — `scripts/analytics-engine.py` (anomaly detection + forecasting)
+- ✅ **v3.0 totalmente compatible**
+
+Ver release completo en [RELEASE_NOTES_v4.0.md](RELEASE_NOTES_v4.0.md) y [CHANGELOG.md](CHANGELOG.md).
+
+---
+
 ## 🚀 Nuevas Características
 
 ### 1. **Integración con Google AI Studio**

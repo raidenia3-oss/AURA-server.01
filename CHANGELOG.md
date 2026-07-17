@@ -5,6 +5,39 @@ All notable changes to AURA/AME will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.0] - 2026-07-16
+
+### Added
+- **Admin Security** (JWT + RBAC) — `ame_backend/src/lib/auth.py`
+  - JWT (HS256) auth on the server-management API
+  - Roles `admin` / `viewer` with per-permission grants
+  - Audit logging of all admin actions (`admin_audit.log`)
+  - Rate limiting (10 req / 60s per user → 429)
+  - Token generation endpoint (`POST /api/admin/servers/generate-token`)
+  - Admin dashboard at `/admin/servers` (requires bearer token)
+- **Multi-Server Support** — `ame_backend/src/deployment/server_adapter.py`
+  - `ServerAdapter` framework (Local / Vercel / Railway / AWS)
+  - `ServerManager`: register, health-check, switch without downtime, DB sync
+  - Admin API `/api/admin/servers` (list / register / switch / sync / audit)
+  - Frontend proxy + `/admin/servers` dashboard
+- **React Native Mobile App** (`ame-mobile-rn/`, Expo + Firebase, offline-first)
+- **Fine-tuned AI pipeline** (`scripts/finetune-model.py`, `scripts/collect-training-data.py`)
+- **Analytics Engine** (`scripts/analytics-engine.py`: aggregation, anomaly detection, forecasting)
+- **CI/CD** — 3-job GitHub Actions (`frontend-checks`, `backend-checks`, `deploy`)
+
+### Changed
+- `app.mount("/", telemetry_app)` now runs **after** routers so admin + browser-control routes are not shadowed.
+- `.github/workflows/auto-deploy.yml` reworked; removed the local `next build` step (pinned `next@9` cannot build the App Router).
+
+### Fixed
+- Browser-control skill 404 caused by root mount order.
+- JWT clock-skew handling (`verify_iat: False` + `leeway`, `iat` issued 60s in the past).
+
+### Performance
+- Multi-server switch validated by a health check before flipping the active target.
+
+---
+
 ## [3.0.0] - 2026-07-14
 
 ### Added
