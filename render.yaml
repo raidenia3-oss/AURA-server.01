@@ -1,4 +1,11 @@
-version: "1"
+# =====================================================================
+# Render Blueprint – AURA Backend (Docker)
+# Despliegue automático 24/7 en Render Free Tier
+# =====================================================================
+# Render usará el Dockerfile multietapa en la raíz del proyecto.
+# No necesita buildCommand ni startCommand: el Dockerfile lo define todo.
+# =====================================================================
+
 services:
   - type: web
     name: aura-backend
@@ -7,8 +14,8 @@ services:
     region: oregon
     branch: main
     dockerfilePath: ./Dockerfile
-    startCommand: uvicorn ame_backend.src.main:app --host 0.0.0.0 --port 8000 --workers 1
     healthCheckPath: /health
+    autoDeploy: true
     envVars:
       - key: JWT_SECRET_ADMIN
         sync: false
