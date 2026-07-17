@@ -13,6 +13,36 @@ AURA/AME es un ecosistema integrado para gestión autónoma de noticias, automat
 
 ---
 
+## ☁️ Despliegue 24/7 (Cloud)
+
+### Opción 1: Render (gratuito, 3 clics)
+1. Ve a [https://dashboard.render.com/blueprints](https://dashboard.render.com/blueprints)
+2. Haz clic en **"New Blueprint"** y conecta tu repositorio de GitHub
+3. Render detectará automáticamente `render.yaml` y creará el servicio
+4. En el dashboard, agrega la variable `JWT_SECRET_ADMIN` con un valor secreto
+5. Tu backend estará disponible en `https://aura-backend.onrender.com` en minutos
+6. Health check automático en `/health` cada 30 segundos
+
+### Opción 2: Oracle Cloud VPS (Free Tier)
+1. Crea una VM Ubuntu 22.04+ en Oracle Cloud Free Tier
+2. Conéctate por SSH y ejecuta:
+   ```bash
+   sudo apt-get install -y git curl
+   git clone https://github.com/raidenia3-oss/AURA-server.01.git
+   cd AURA-server.01
+   sudo chmod +x scripts/deploy/setup_vps.sh
+   sudo JWT_SECRET_ADMIN=tu_secreto_seguro ./scripts/deploy/setup_vps.sh
+   ```
+3. El script automatiza: actualización del sistema → Docker → firewall (puerto 8000) → clonar repo → construir imagen → ejecutar contenedor
+4. **Importante en Oracle Cloud**: También debes abrir el puerto 8000 en las **Security Lists** de la consola de Oracle (Network → Virtual Cloud Network → Security List → Add Ingress Rule: puerto 8000, CIDR `0.0.0.0/0`)
+
+### Verificar despliegue
+```bash
+curl http://<IP_DEL_SERVIDOR>:8000/health
+# → {"status":"ok","ai":{...}}
+```
+
+
 ## 🚀 v4.0.0 — Production-Grade
 
 - 🔐 **Admin Security** — JWT + RBAC + audit logging + rate limiting en `/api/admin/servers`
@@ -377,22 +407,48 @@ node ../frontend/lib/firebase-setup-manual.js
 
 ---
 
-## 🎯 Próximos Pasos para el Desarrollo
+## 🌐 Despliegue Local (Red Wi-Fi)
 
-1. **Implementar Chrome Extension**:
-   - Completar la lógica en `background.js`.
-   - Validar funcionalidad y generar documentación.
+AURA corre 100% local en tu red doméstica. Sin depender de Vercel, Railway ni ninguna nube.
 
-2. **Configurar EasyCron**:
-   - Crear webhook para notificaciones.
-   - Programar ejecución cada 6 horas.
+### Requisitos
+- Python 3.10+
+- `pip install -r requirements.txt`
 
-3. **Realizar Tests End-to-End**:
-   - Validar flujo completo de noticias y recomendaciones.
-   - Probar integración con Google AI Studio (modo simulado o real).
+### Iniciar el servidor
+```bash
+# Desde la raíz del proyecto:
+python -m uvicorn ame_backend.src.main:app --host 0.0.0.0 --port 8000 --reload
+```
 
-4. **Crear Dashboard de Monitoreo**:
-   - Diseñar interfaz para visualización de status.
-   - Integrar APIs existentes.
+El flag `--host 0.0.0.0` hace que el servidor sea accesible desde **cualquier dispositivo en tu red Wi-Fi** (celulares, tablets, otras PCs, Smart TV).
 
----
+### Probar desde cualquier dispositivo
+1. Abre `dashboard_local.html` (en la raíz del proyecto) en cualquier navegador.
+2. Escribe la IP local de la PC donde corre el servidor (ej: `192.168.1.100`).
+3. Haz clic en **Conectar** y prueba los endpoints en tiempo real.
+
+> Para obtener tu IP local en Windows: `ipconfig` (busca "Dirección IPv4").
+> En Linux/Mac: `ip addr` o `ifconfig`.
+
+### CORS
+El middleware ya está configurado para aceptar peticiones desde cualquier origen (`*`), cualquier método y cualquier header. Puedes hacer `fetch()` desde Google Sites, un HTML local, o cualquier app en la red sin restricciones.
+
+### Dashboard Local
+`dashboard_local.html` es un archivo HTML único (CSS + JS embebido) que:
+- Permite ingresar la IP del servidor
+- Prueba conexión vía `/health`
+- Ejecuta llamadas a endpoints clave (`/api/chat`, `/api/mobile/ames`, `/api/analytics`, etc.)
+- Muestra estado en vivo del servidor
+- Guarda la IP en `localStorage` para uso futuro
+
+### Arquitectura
+```
+[PC Servidor] → FastAPI en 0.0.0.0:8000
+       ↓
+[Red Wi-Fi local] ← cualquier dispositivo con navegador
+       ↓
+dashboard_local.html  o  Google Sites  o  app React Native
+```
+
+
