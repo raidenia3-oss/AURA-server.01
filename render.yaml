@@ -1,0 +1,40 @@
+# =====================================================================
+# Render Blueprint – AURA Backend (FastAPI)
+# Despliegue automático 24/7 en Render Free Tier
+# =====================================================================
+# Conecta este repositorio en Render Dashboard:
+#   1. Ve a https://dashboard.render.com/blueprints
+#   2. "New Blueprint" → selecciona este repo
+#   3. Render leerá este archivo y creará el servicio automáticamente
+# =====================================================================
+
+services:
+  # ── Servicio Web (FastAPI) ─────────────────────────────────────────
+  - type: web
+    name: aura-backend
+    env: python
+    plan: free                         # Free tier (512 MB RAM, 0.1 CPU)
+    region: oregon                     # Cambiar si es necesario
+    branch: main
+    buildCommand: |
+      pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: >
+      uvicorn ame_backend.src.main:app --host 0.0.0.0 --port 8000 --workers 1
+
+    # ── Health Check ─────────────────────────────────────────────────
+    healthCheckPath: /health
+    healthCheckInterval: 30
+
+    # ── Puertos ──────────────────────────────────────────────────────
+    autoDeploy: true
+
+    # ── Variables de Entorno ─────────────────────────────────────────
+    envVars:
+      - key: JWT_SECRET_ADMIN
+        sync: false                    # Se ingresa manualmente en el dashboard
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: PYTHON_VERSION
+        value: 3.11.0
