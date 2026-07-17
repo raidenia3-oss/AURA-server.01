@@ -17,6 +17,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 
 from ame_backend.src.automation.self_healing import SelfHealingDaemon
 from ame_backend.src.automation.task_manager import TaskManager
@@ -59,6 +60,22 @@ try:
     app.include_router(admin_servers_router)
 except Exception as _exc:  # pragma: no cover - optional
     logger.warning("No se pudo montar el router admin-servers: %s", _exc)
+
+# Serve the local dashboard HTML from the repo root, BEFORE mounting the
+# telemetry app at "/" so this route is never shadowed (404 bug fix).
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard() -> str:
+    dashboard_path = Path(__file__).resolve().parents[2] / "dashboard_local.html"
+    try:
+        return dashboard_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return (
+            "<html><body style='font-family:sans-serif'>"
+            "<h1>AURA Dashboard</h1>"
+            "<p>No se encontro dashboard_local.html en la raiz del proyecto.</p>"
+            "</body></html>"
+        )
+
 
 # Mount the telemetry app LAST so it only catches paths not handled above.
 app.mount("/", telemetry_app)

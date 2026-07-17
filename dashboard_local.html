@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>AURA · Panel Local</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    background:#0a0a1a;
+    color:#e0e0e0;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:2rem 1rem
+  }
+  .container{width:100%;max-width:640px}
+  h1{
+    font-size:2.5rem;font-weight:700;letter-spacing:4px;
+    background:linear-gradient(135deg,#00d4ff,#7b2ff7);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    margin-bottom:.25rem
+  }
+  .sub{color:#666;font-size:.9rem;margin-bottom:2rem}
+  .card{
+    background:#12122a;border:1px solid #2a2a4e;border-radius:16px;
+    padding:1.5rem;margin-bottom:1.5rem
+  }
+  .card h2{font-size:1rem;color:#00d4ff;margin-bottom:1rem;font-weight:600}
+  label{display:block;font-size:.85rem;color:#888;margin-bottom:.4rem}
+  .input-row{display:flex;gap:.5rem;flex-wrap:wrap}
+  input[type=text]{
+    flex:1;min-width:180px;
+    background:#1a1a2e;border:1px solid #2a2a4e;border-radius:8px;
+    padding:.7rem 1rem;color:#fff;font-size:1rem;font-family:monospace
+  }
+  input[type=text]:focus{outline:none;border-color:#00d4ff;box-shadow:0 0 0 2px rgba(0,212,255,.2)}
+  button{
+    background:#00d4ff;color:#0a0a1a;border:none;border-radius:8px;
+    padding:.7rem 1.4rem;font-weight:700;font-size:.95rem;cursor:pointer;
+    transition:.2s;white-space:nowrap
+  }
+  button:hover{background:#00e5ff;transform:translateY(-1px)}
+  button:active{transform:translateY(0)}
+  button.secondary{background:#2a2a4e;color:#e0e0e0}
+  button.secondary:hover{background:#3a3a5e}
+  .btn-group{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem}
+  .result-box{
+    background:#0d0d20;border:1px solid #1a1a3e;border-radius:10px;
+    padding:1rem;margin-top:.8rem;font-family:monospace;font-size:.85rem;
+    min-height:3rem;white-space:pre-wrap;word-break:break-all
+  }
+  .result-box.success{border-color:#00ff88}
+  .result-box.error{border-color:#ff4444;color:#ff6666}
+  .result-box.pending{color:#888;font-style:italic}
+  .status-grid{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-top:.8rem}
+  .status-item{
+    background:#0d0d20;border:1px solid #1a1a3e;border-radius:8px;
+    padding:.6rem .8rem;text-align:center
+  }
+  .status-item .label{font-size:.7rem;color:#666;text-transform:uppercase;letter-spacing:.5px}
+  .status-item .value{font-size:1.1rem;font-weight:700;margin-top:.2rem}
+  .value.online{color:#00ff88}
+  .value.offline{color:#ff4444}
+  .endpoint-tag{
+    display:inline-block;background:#1a1a2e;color:#00d4ff;font-family:monospace;
+    font-size:.75rem;padding:.2rem .6rem;border-radius:4px;margin-right:.3rem;margin-bottom:.3rem
+  }
+  footer{color:#444;font-size:.75rem;margin-top:2rem;text-align:center}
+  a{color:#00d4ff;text-decoration:none}
+  a:hover{text-decoration:underline}
+  @media(max-width:480px){
+    h1{font-size:1.8rem}
+    .card{padding:1rem}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>AURA</h1>
+  <p class="sub">Panel de control · Red Wi-Fi local</p>
+
+  <!-- CONFIGURACIÓN IP -->
+  <div class="card">
+    <h2>🔗 Conexión</h2>
+    <label for="ipInput">IP local del servidor AURA (puerto 8000)</label>
+    <div class="input-row">
+      <input type="text" id="ipInput" placeholder="ej: 192.168.1.100" value="192.168.1.100">
+      <button id="connectBtn">Conectar</button>
+    </div>
+    <div class="result-box pending" id="connectionStatus">Esperando conexión...</div>
+  </div>
+
+  <!-- ENDPOINTS -->
+  <div class="card">
+    <h2>🧪 Probar endpoints</h2>
+    <div class="btn-group">
+      <button class="secondary" data-endpoint="/health">/health</button>
+      <button class="secondary" data-endpoint="/api/admin/servers">/admin-servers</button>
+      <button class="secondary" data-endpoint="/api/skills/browser-control">/browser-control</button>
+      <button class="secondary" data-endpoint="/api/chat">/api/chat</button>
+      <button class="secondary" data-endpoint="/api/mobile/ames">/ames</button>
+      <button class="secondary" data-endpoint="/api/analytics">/analytics</button>
+    </div>
+    <div class="result-box pending" id="endpointResult">Selecciona un endpoint para probar</div>
+  </div>
+
+  <!-- ESTADO RÁPIDO -->
+  <div class="card">
+    <h2>📊 Estado del servidor</h2>
+    <div class="status-grid" id="statusGrid">
+      <div class="status-item"><div class="label">Servidor</div><div class="value offline" id="srvStatus">—</div></div>
+      <div class="status-item"><div class="label">Latencia</div><div class="value" id="srvLatency">—</div></div>
+      <div class="status-item"><div class="label">API</div><div class="value offline" id="srvApi">—</div></div>
+      <div class="status-item"><div class="label">Conexión</div><div class="value offline" id="srvConn">—</div></div>
+    </div>
+    <div class="btn-group">
+      <button class="secondary" id="refreshStatusBtn">🔄 Refrescar estado</button>
+    </div>
+  </div>
+
+  <footer>
+    AURA v4.0 · Modo local Wi-Fi · 
+    <a href="#" id="openDocs">README.md</a>
+  </footer>
+</div>
+
+<script>
+(function(){
+  const ipInput = document.getElementById('ipInput');
+  const connectBtn = document.getElementById('connectBtn');
+  const connectionStatus = document.getElementById('connectionStatus');
+  const endpointResult = document.getElementById('endpointResult');
+  const endpointBtns = document.querySelectorAll('[data-endpoint]');
+  const refreshBtn = document.getElementById('refreshStatusBtn');
+
+  let BASE_URL = '';
+
+  function getBaseUrl(){
+    const ip = ipInput.value.trim();
+    if(!ip) return '';
+    return `http://${ip}:8000`;
+  }
+
+  async function fetchFrom(url, options={}){
+    const resp = await fetch(url, { ...options, signal: AbortSignal.timeout(8000) });
+    if(!resp.ok){
+      const text = await resp.text();
+      throw new Error(`${resp.status} ${resp.statusText}: ${text.slice(0,200)}`);
+    }
+    const ct = resp.headers.get('content-type') || '';
+    if(ct.includes('application/json')) return await resp.json();
+    return await resp.text();
+  }
+
+  function showResult(element, data, isError=false){
+    element.className = 'result-box';
+    if(isError){
+      element.classList.add('error');
+      element.textContent = `❌ ${String(data)}`;
+    } else {
+      element.classList.add('success');
+      try {
+        element.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+      } catch(e){
+        element.textContent = String(data);
+      }
+    }
+  }
+
+  async function testConnection(){
+    const base = getBaseUrl();
+    if(!base){
+      showResult(connectionStatus, 'Ingresa una IP válida', true);
+      return false;
+    }
+    connectionStatus.className = 'result-box pending';
+    connectionStatus.textContent = 'Conectando...';
+    BASE_URL = base;
+    try {
+      const data = await fetchFrom(`${base}/health`);
+      showResult(connectionStatus, data);
+      updateStatusGrid(data);
+      return true;
+    } catch(e){
+      showResult(connectionStatus, `No se pudo conectar a ${base}/health — ${e.message}`, true);
+      updateStatusGrid(null);
+      return false;
+    }
+  }
+
+  function updateStatusGrid(healthData){
+    const srv = document.getElementById('srvStatus');
+    const lat = document.getElementById('srvLatency');
+    const api = document.getElementById('srvApi');
+    const conn = document.getElementById('srvConn');
+
+    if(!healthData){
+      srv.className='value offline'; srv.textContent='OFF';
+      lat.textContent='—';
+      api.className='value offline'; api.textContent='—';
+      conn.className='value offline'; conn.textContent='—';
+      return;
+    }
+    srv.className='value online'; srv.textContent='OK';
+    api.className='value online'; api.textContent='OK';
+    conn.className='value online'; conn.textContent='Wi-Fi';
+    lat.textContent = healthData.latency_ms ? `${healthData.latency_ms}ms` : '< 50ms';
+  }
+
+  async function testEndpoint(endpoint){
+    const base = getBaseUrl();
+    if(!base){
+      showResult(endpointResult, 'Primero configura y conecta la IP', true);
+      return;
+    }
+    
+    const url = `${base}${endpoint}`;
+    endpointResult.className = 'result-box pending';
+    endpointResult.textContent = `Llamando ${url} ...`;
+
+    try {
+      let data;
+      if(endpoint === '/api/chat'){
+        data = await fetchFrom(url, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({prompt: 'Hola AURA, ¿cómo estás?', context: 'test desde dashboard local'})
+        });
+      } else {
+        data = await fetchFrom(url);
+      }
+      showResult(endpointResult, data);
+
+      // Si llamamos /health actualizamos el status grid
+      if(endpoint === '/health') updateStatusGrid(data);
+    } catch(e){
+      showResult(endpointResult, `Error en ${endpoint}: ${e.message}`, true);
+    }
+  }
+
+  // Eventos
+  connectBtn.addEventListener('click', testConnection);
+  ipInput.addEventListener('keydown', e => { if(e.key==='Enter') testConnection(); });
+
+  endpointBtns.forEach(btn => {
+    btn.addEventListener('click', () => testEndpoint(btn.dataset.endpoint));
+  });
+
+  refreshBtn.addEventListener('click', testConnection);
+
+  // Auto-conectar al cargar si hay IP guardada
+  const saved = localStorage.getItem('aura_local_ip');
+  if(saved){ ipInput.value = saved; testConnection(); }
+  ipInput.addEventListener('change', () => localStorage.setItem('aura_local_ip', ipInput.value.trim()));
+
+  document.getElementById('openDocs').addEventListener('click', e => {
+    e.preventDefault();
+    window.open('README.md', '_blank');
+  });
+
+  // Enter también prueba el endpoint activo
+  console.log('AURA Dashboard Local listo.');
+})();
+</script>
+</body>
+</html>
