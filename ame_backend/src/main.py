@@ -41,7 +41,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/", telemetry_app)
+# Routers must be included BEFORE mounting the telemetry app at "/", otherwise
+# the root mount shadows every subsequent path (they would 404).
 
 # Browser-control skill (optional; safe to skip if the module fails to load)
 try:
@@ -50,6 +51,17 @@ try:
     app.include_router(browser_control_router)
 except Exception as _exc:  # pragma: no cover - optional dependency
     logger.warning("No se pudo montar el router browser-control: %s", _exc)
+
+# Admin: multi-server management (optional)
+try:
+    from ame_backend.src.api.admin_servers import router as admin_servers_router
+
+    app.include_router(admin_servers_router)
+except Exception as _exc:  # pragma: no cover - optional
+    logger.warning("No se pudo montar el router admin-servers: %s", _exc)
+
+# Mount the telemetry app LAST so it only catches paths not handled above.
+app.mount("/", telemetry_app)
 
 
 @app.get("/health")
