@@ -173,8 +173,10 @@ frontend/.next
 
 
 # Frontend static build output (embedded in backend)
-frontend_static/**/cache/
-frontend_static/**/*.ts
-frontend_static/**/*.nft.json
-frontend_static/**/.rsc
-frontend_static/**/.meta
+
+
+# Build estatico del frontend servido por FastAPI
+
+# Build estatico del frontend servido por FastAPI (siempre versionado)
+ame_backend/src/frontend_static/**
+!ame_backend/src/frontend_static/**

@@ -19,7 +19,23 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import FileResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
+
+class SPAStaticFiles(StaticFiles):
+    """StaticFiles that falls back to <path>.html for SPA routes
+    (e.g. /integrations -> /integrations.html)."""
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except (StarletteHTTPException, FileNotFoundError):
+            html_candidate = path.rstrip("/") + ".html"
+            try:
+                return await super().get_response(html_candidate, scope)
+            except Exception:
+                raise StarletteHTTPException(status_code=404) from None
 from ame_backend.src.automation.self_healing import SelfHealingDaemon
 from ame_backend.src.automation.task_manager import TaskManager
 from ame_backend.src.database.database import Database
@@ -76,42 +92,6 @@ def dashboard() -> str:
             "<p>No se encontro dashboard_local.html en la raiz del proyecto.</p>"
             "</body></html>"
         )
-
-
-# Serve the built frontend (Next.js static export) from the same origin
-# as the API, so the whole AURA system loads at the Render root URL.
-# Registered BEFORE app.mount("/", telemetry_app) so the explicit
-# /api/*, /health and /dashboard routes above still win.
-_STATIC_DIR = Path(__file__).resolve().parents[0] / "frontend_static"
-_SERVER_APP = _STATIC_DIR / "server" / "app"
-
-
-@app.get("/{full_path:path}")
-def spa_fallback(full_path: str) -> HTMLResponse:
-    """SPA fallback: serve the matching prerendered HTML, else index.html.
-    Paths under /_next/ are handled by the StaticFiles mount below,
-    so we never mask real static assets here."""
-    if full_path.startswith("_next/"):
-        return HTMLResponse(b"404: not found", status_code=404)
-    candidate = _SERVER_APP / full_path
-    if candidate.is_file() and candidate.suffix == ".html":
-        return HTMLResponse(candidate.read_bytes())
-    index = _SERVER_APP / "index.html"
-    if index.is_file():
-        return HTMLResponse(index.read_bytes())
-    return HTMLResponse(
-        b"<html><body style='font-family:sans-serif'><h1>AURA</h1>"
-        b"<p>Frontend estatico no encontrado.</p></body></html>"
-    )
-
-
-# Next.js static assets (_next/static) live under frontend_static/static.
-# Mounted before spa_fallback so real assets are served, not the SPA fallback.
-if (_STATIC_DIR / "static").is_dir():
-    app.mount("/_next/static", StaticFiles(directory=str(_STATIC_DIR / "static")), name="next_static")
-
-# Mount the telemetry app LAST so it only catches paths not handled above.
-app.mount("/", telemetry_app)
 
 
 @app.get("/health")
@@ -224,6 +204,27 @@ async def ws_bridge(ws: WebSocket) -> None:
 @app.post("/emergency")
 def emergency() -> dict:
     return {"status": "shutdown_initiated"}
+
+
+# ------------------------------------------------------------------ #
+# Servir el frontend (Next.js static export) desde el mismo origen que la API,
+# para que todo el sistema AURA cargue en la URL raiz de Render.
+# Se registra DESPUES de todas las rutas /api/*, /health, /dashboard
+# para que estas ganen y el SPA solo capture lo no-IAPI.
+_STATIC_DIR = Path(__file__).resolve().parents[0] / "frontend_static"
+_SERVER_APP = _STATIC_DIR / "server" / "app"
+
+# Next.js static assets (_next/static) viven en frontend_static/static.
+if (_STATIC_DIR / "static").is_dir():
+    app.mount("/_next/static", StaticFiles(directory=str(_STATIC_DIR / "static")), name="next_static")
+
+# HTML prerenderizado del SPA (index.html, /integrations.html, etc.)
+if _SERVER_APP.is_dir():
+    app.mount("/", SPAStaticFiles(directory=str(_SERVER_APP), html=True), name="frontend_spa")
+
+# El telemetry_app expone /api/health, /api/status, etc. Se monta en
+# /api para no sombrear el SPA y coincidir con lo que llama el frontend.
+app.mount("/api", telemetry_app)
 
 
 # ------------------------------------------------------------------ #
