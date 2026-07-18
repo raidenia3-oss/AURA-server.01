@@ -16,7 +16,7 @@
     "@microsoft/teams-js": "^2.53.1",
     "@slack/bolt": "^4.7.3",
     "discord.js": "^13.17.1",
-    "next": "^9.3.3",
+    "next": "^15.5.0",
     "next-auth": "^3.29.10",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -29,7 +29,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.2.10",
+    "eslint-config-next": "^15.5.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
