@@ -171,3 +171,10 @@ ame-backend/src/traffic/output/
 .next
 frontend/.next
 
+
+# Frontend static build output (embedded in backend)
+frontend_static/**/cache/
+frontend_static/**/*.ts
+frontend_static/**/*.nft.json
+frontend_static/**/.rsc
+frontend_static/**/.meta
