@@ -30,7 +30,9 @@ from ame_backend.src.services.ai_engine import AIEngine
 from ame_backend.src.api.api_service import app as telemetry_app
 from ame_backend.src import models as db_models
 from ame_backend.src.neural_core import EvolutionCore
+from ame_backend.src.neural_core import SemanticMemory
 from ame_backend.src import keep_alive as keep_alive_mod
+from ame_backend.src.tools import browser
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,7 @@ db = Database()
 # Núcleo Evolutivo: memoria (SQLAlchemy) + neurona + sys vitals + keep-alive.
 db_models.init_db()
 core = EvolutionCore(keep_alive_fn=keep_alive_mod.trigger_keep_alive)
+memory = SemanticMemory()
 
 healer = SelfHealingDaemon(task_manager=task_mgr)
 
@@ -130,20 +133,79 @@ def health() -> dict:
 def chat(payload: dict) -> dict:
     prompt = payload.get("prompt", "")
     context = payload.get("context")
+
+    # 1) NAVEGACIÓN WEB AUTÓNOMA ("garras en la red").
+    #    - Si el usuario incluye un enlace -> rasparlo y usarlo como contexto.
+    #    - Si pide "busca en internet: <tema>" -> GOOGLEar y raspar resultados.
+    web_context = ""
+    urls = browser.find_urls(prompt)
+    web_trigger = False
+    m = __import__("re").search(r"busca\s+en\s+internet\s*:\s*(.+)", prompt, __import__("re").IGNORECASE)
+    if m:
+        web_trigger = True
+        topic = m.group(1).strip()
+        try:
+            from ame_backend.src.tools import web_search
+
+            found = web_search.search(topic, num_results=3)
+            for fu in found:
+                urls.append(fu)
+        except Exception as exc:
+            logger.error("Búsqueda web falló: %s", exc)
+    for u in list(dict.fromkeys(urls))[:3]:  # úncias, máx 3
+        try:
+            snippet = browser.fetch_clean_text(u, timeout=15.0, max_chars=4000)
+            if snippet:
+                web_context += f"\n\n[Fuente: {u}]\n{snippet}\n"
+        except Exception as exc:
+            logger.error("No se pudo raspar %s: %s", u, exc)
+
+    # 2) MEMORIA SEMÁNTICA (RAG): recordar sinápsis del usuario.
+    try:
+        if prompt.strip():
+            memory.remember(prompt, kind="chat")
+    except Exception as exc:
+        logger.error("No se guardó memoria semántica: %s", exc)
+
+    # Construir contexto enriquecido: RAG + web.
+    rag_context = ""
+    try:
+        rag_context = memory.build_context(prompt or web_context, top_k=3)
+    except Exception as exc:
+        logger.error("RAG falló: %s", exc)
+
+    enriched_context = context or ""
+    if rag_context:
+        enriched_context += f"\n\n{rag_context}"
+    if web_context:
+        enriched_context += f"\n\n[Contexto de internet en vivo]:{web_context}"
+    if web_trigger:
+        enriched_context += (
+            "\n\n(INSTRUCCIÓN: responde usando SOLO el contexto de "
+            "internet proporcionado arriba. Cita las fuentes.)"
+        )
+
     # Memoria de estado: guardar el mensaje real del usuario.
     try:
-        db_models.save_message(role="user", content=prompt, session_id="ws")
+        db_models.save_message(
+            role="user", content=prompt, session_id="ws", context=enriched_context
+        )
     except Exception as exc:
         logger.error("No se pudo guardar mensaje de usuario: %s", exc)
-    result = ai.chat(prompt=prompt, context=context)
+
+    result = ai.chat(prompt=prompt, context=enriched_context or None)
     text = result.get("text", "")
     provider = result.get("provider")
     intent = result.get("intent")
+
     # Memoria de estado: guardar la respuesta real del asistente.
     try:
-        db_models.save_message(role="assistant", content=text, provider=provider, session_id="ws")
+        db_models.save_message(
+            role="assistant", content=text, provider=provider, session_id="ws"
+        )
     except Exception as exc:
         logger.error("No se pudo guardar respuesta: %s", exc)
+
     if intent and intent.get("action") == "START_BOT":
         start_url = payload.get("start_url", "https://example.com/survey")
         status = task_mgr.start_survey_bot(start_url)
@@ -164,6 +226,16 @@ def chat_history(limit: int = 50) -> dict:
     except Exception as exc:
         logger.error("No se pudo leer el historial: %s", exc)
         return {"messages": [], "total": 0, "error": str(exc)}
+
+
+@app.get("/api/memory")
+def memory_endpoint(limit: int = 20) -> dict:
+    """Memoria semántica (RAG) persistida."""
+    try:
+        return {"memories": db_models.recent_memories(limit=limit), "total": db_models.count_memories()}
+    except Exception as exc:
+        logger.error("No se pudo leer memoria: %s", exc)
+        return {"memories": [], "total": 0, "error": str(exc)}
 
 
 @app.get("/neural/status")

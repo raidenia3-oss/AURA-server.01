@@ -158,3 +158,21 @@ export async function getChatHistory(limit = 50): Promise<ChatHistory> {
     return res.json();
 }
 
+export interface MemoryItem {
+    id: number;
+    content: string;
+    kind: string;
+    timestamp: string | null;
+}
+
+export interface SemanticMemory {
+    memories: MemoryItem[];
+    total: number;
+}
+
+export async function getMemory(limit = 20): Promise<SemanticMemory> {
+    const res = await fetch(url(`/api/memory?limit=${limit}`));
+    if (!res.ok) throw new Error(`memory ${res.status}`);
+    return res.json();
+}
+

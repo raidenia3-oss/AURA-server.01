@@ -6,12 +6,14 @@ import {
     getBalance,
     getSuccessRate,
     getNeuralStatus,
+    getMemory,
     type HealthStatus,
     type BotStatus,
     type ActivityLog,
     type BalanceResponse,
     type SuccessRateResponse,
     type NeuralStatus,
+    type SemanticMemory,
 } from "../services/api";
 import KnowledgeBase from "./KnowledgeBase";
 
@@ -32,6 +34,7 @@ export default function Sidebar({
     const [balance, setBalance] = useState<BalanceResponse | null>(null);
     const [success, setSuccess] = useState<SuccessRateResponse | null>(null);
     const [neural, setNeural] = useState<NeuralStatus | null>(null);
+    const [memory, setMemory] = useState<SemanticMemory | null>(null);
     const [showKb, setShowKb] = useState(false);
 
     useEffect(() => {
@@ -53,6 +56,9 @@ export default function Sidebar({
         getNeuralStatus()
             .then(setNeural)
             .catch(() => setNeural(null));
+        getMemory(10)
+            .then(setMemory)
+            .catch(() => setMemory(null));
     }, []);
 
     // Refresco en vivo del Núcleo Evolutivo (cada 5 s).
@@ -60,6 +66,9 @@ export default function Sidebar({
         const id = setInterval(() => {
             getNeuralStatus()
                 .then(setNeural)
+                .catch(() => {});
+            getMemory(10)
+                .then(setMemory)
                 .catch(() => {});
         }, 5000);
         return () => clearInterval(id);
@@ -246,6 +255,33 @@ export default function Sidebar({
                                     ⚠️ Inactividad detectada → keep-alive
                                 </p>
                             )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Memoria Semántica (RAG) */}
+                {memory && (
+                    <div className="border-t border-white/5 pt-4">
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-aura-muted mb-2">
+                            🧠 Memoria Semántica
+                        </h3>
+                        <p className="text-xs text-aura-muted mb-2">
+                            {memory.total} recuerdo(s) vectoriales
+                        </p>
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                            {memory.memories.length === 0 && (
+                                <p className="text-xs text-aura-muted">Sin recuerdos aún</p>
+                            )}
+                            {memory.memories.map((m) => (
+                                <div
+                                    key={m.id}
+                                    className="text-xs text-aura-muted bg-aura-bg rounded px-2 py-1 truncate"
+                                    title={m.content}
+                                >
+                                    <span className="text-aura-purple">[{m.kind}]</span>{" "}
+                                    {m.content}
+                                </div>
+                            ))}
                         </div>
                     </div>
                 )}

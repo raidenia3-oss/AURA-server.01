@@ -255,3 +255,118 @@ class EvolutionCore:
             "keep_alive_fired": self.keep_alive_fired,
             "threshold": self.brain.INSTABILITY_THRESHOLD,
         }
+
+
+# --------------------------------------------------------------------------- #
+# Memoria Semántica (RAG) — embeddings de Gemini + coseno nativo
+# --------------------------------------------------------------------------- #
+def cosine_similarity(a: List[float], b: List[float]) -> float:
+    """Similitud de coseno con matemáticas puras de Python."""
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = 0.0
+    na = 0.0
+    nb = 0.0
+    for x, y in zip(a, b):
+        dot += x * y
+        na += x * x
+        nb += y * y
+    denom = math.sqrt(na) * math.sqrt(nb)
+    if denom == 0.0:
+        return 0.0
+    return dot / denom
+
+
+class GeminiEmbedder:
+    """Genera embeddings usando la API de Gemini (embedding-001)."""
+
+    def __init__(self) -> None:
+        self.api_key = os.getenv("GEMINI_API_KEY")
+        self.model = os.getenv("GEMINI_EMBED_MODEL", "embedding-001")
+        self.base_url = os.getenv(
+            "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"
+        )
+        self.enabled = bool(self.api_key)
+
+    def embed(self, text: str) -> Optional[List[float]]:
+        """Devuelve el vector de embedding o None si no hay API key."""
+        if not self.enabled or not text:
+            return None
+        url = (
+            f"{self.base_url}/models/{self.model}:batchEmbedContents"
+            f"?key={self.api_key}"
+        )
+        payload = {
+            "requests": [
+                {"model": f"models/{self.model}", "content": {"parts": [{"text": text}]}}
+            ]
+        }
+        try:
+            import requests  # stdlib-friendly, ya en requirements
+
+            resp = requests.post(url, json=payload, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            # Respuesta: { "embeddings": [ { "values": [...] } ] }
+            emb = data.get("embeddings", [{}])[0]
+            return emb.get("values")
+        except Exception as exc:  # pragma: no cover - resiliencia
+            print(f"[GeminiEmbedder] fallo: {exc}")
+            return None
+
+
+class SemanticMemory:
+    """RAG nativo: guarda recuerdos + embeddings y recupera los
+    más parecidos al contexto actual por coseno.
+    """
+
+    def __init__(self) -> None:
+        self.embedder = GeminiEmbedder()
+
+    def remember(
+        self, content: str, kind: str = "chat"
+    ) -> Optional[int]:
+        """Genera embedding y persiste el recuerdo en ``semantic_memory``."""
+        vector = self.embedder.embed(content)
+        try:
+            row = models.save_memory(content=content, vector=vector, kind=kind)
+            return row.id
+        except Exception as exc:  # pragma: no cover
+            print(f"[SemanticMemory] no se guardó: {exc}")
+            return None
+
+    def recall(self, query: str, top_k: int = 3, min_sim: float = 0.25) -> List[dict]:
+        """Busca los ``top_k`` recuerdos más similares a ``query``."""
+        q_vec = self.embedder.embed(query)
+        if q_vec is None:
+            # Sin embeddings: devolvemos los más recientes como fallback.
+            return models.recent_memories(top_k)
+        rows = models.memory_rows()
+        scored = []
+        for r in rows:
+            if not r["vector"]:
+                continue
+            sim = cosine_similarity(q_vec, r["vector"])
+            if sim >= min_sim:
+                scored.append((sim, r))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [
+            {
+                "id": r["id"],
+                "content": r["content"],
+                "kind": r["kind"],
+                "similarity": round(sim, 4),
+            }
+            for sim, r in scored[:top_k]
+        ]
+
+    def build_context(self, query: str, top_k: int = 3) -> str:
+        """Arma un bloque de contexto RAG para inyectar en el prompt."""
+        hits = self.recall(query, top_k=top_k)
+        if not hits:
+            return ""
+        lines = ["[Memoria semántica de AURA — recuerdos relacionados]"]
+        for h in hits:
+            lines.append(f"- ({h['similarity']}) {h['content'][:400]}")
+        return "\n".join(lines)
+

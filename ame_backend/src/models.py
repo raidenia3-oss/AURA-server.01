@@ -9,6 +9,8 @@ Usa SQLAlchemy 2.x sobre la variable de entorno ``DATABASE_URL``:
 Tablas:
 - ``chat_history``: mensajes reales del chat (usuario / asistente).
 - ``neural_state``: pesos, bias y tasa de aprendizaje de la neurona.
+- ``semantic_memory``: memoria subconsciente vectorial (RAG) con
+  embeddings de Gemini y similitud de coseno.
 """
 
 from __future__ import annotations
@@ -49,7 +51,9 @@ def _resolve_url() -> str:
         return raw
     db_path = Path(__file__).resolve().parent.parent / "aura_core.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    return f"sqlite:///{db_path}"
+    # Forma correcta Windows: sqlite:///C:/ruta/db.sqlite (3 barras).
+    posix = db_path.as_posix()
+    return f"sqlite:///{posix}"
 
 
 ENGINE_URL = _resolve_url()
@@ -70,6 +74,7 @@ class ChatMessage(Base):
     content = Column(Text)
     provider = Column(String(64))
     session_id = Column(String(64))
+    context = Column(Text)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -97,6 +102,22 @@ class NeuralState(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
+class SemanticMemory(Base):
+    """Memoria subconsciente vectorial (RAG).
+
+    Cada registro guarda un fragmento de conocimiento (mensaje clave,
+    código importante, nota) junto con su embedding de Gemini como JSON.
+    """
+
+    __tablename__ = "semantic_memory"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    content = Column(Text)
+    kind = Column(String(32), default="chat")  # 'chat' | 'code' | 'note'
+    vector_json = Column(Text)  # JSON list[float]
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
 def init_db() -> None:
     """Crea las tablas si no existen."""
     Base.metadata.create_all(bind=engine)
@@ -114,6 +135,7 @@ def save_message(
     content: str,
     provider: Optional[str] = None,
     session_id: Optional[str] = None,
+    context: Optional[str] = None,
 ) -> ChatMessage:
     with get_session() as s:
         msg = ChatMessage(
@@ -121,6 +143,7 @@ def save_message(
             content=content,
             provider=provider,
             session_id=session_id,
+            context=context,
             created_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         s.add(msg)
@@ -178,3 +201,64 @@ def save_neural_state(
         row.last_stability = last_stability
         row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         s.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Memoria semántica (RAG)
+# --------------------------------------------------------------------------- #
+def save_memory(
+    content: str,
+    vector: Optional[List[float]] = None,
+    kind: str = "chat",
+) -> SemanticMemory:
+    with get_session() as s:
+        row = SemanticMemory(
+            content=content,
+            kind=kind,
+            vector_json=json.dumps(vector) if vector is not None else None,
+            timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
+        )
+        s.add(row)
+        s.commit()
+        s.refresh(row)
+        return row
+
+
+def memory_rows() -> List[Dict[str, Any]]:
+    """Devuelve todos los recuerdos con su vector (para retrieval)."""
+    with get_session() as s:
+        rows = s.query(SemanticMemory).order_by(SemanticMemory.id.desc()).all()
+        return [
+            {
+                "id": r.id,
+                "content": r.content,
+                "kind": r.kind,
+                "vector": json.loads(r.vector_json) if r.vector_json else None,
+                "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+            }
+            for r in rows
+        ]
+
+
+def count_memories() -> int:
+    with get_session() as s:
+        return s.query(SemanticMemory).count()
+
+
+def recent_memories(limit: int = 20) -> List[Dict[str, Any]]:
+    with get_session() as s:
+        rows = (
+            s.query(SemanticMemory)
+            .order_by(SemanticMemory.id.desc())
+            .limit(limit)
+            .all()
+        )
+        return [
+            {
+                "id": r.id,
+                "content": r.content,
+                "kind": r.kind,
+                "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+            }
+            for r in reversed(rows)
+        ]
