@@ -23,19 +23,6 @@ from starlette.responses import FileResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
-class SPAStaticFiles(StaticFiles):
-    """StaticFiles that falls back to <path>.html for SPA routes
-    (e.g. /integrations -> /integrations.html)."""
-
-    async def get_response(self, path: str, scope):
-        try:
-            return await super().get_response(path, scope)
-        except (StarletteHTTPException, FileNotFoundError):
-            html_candidate = path.rstrip("/") + ".html"
-            try:
-                return await super().get_response(html_candidate, scope)
-            except Exception:
-                raise StarletteHTTPException(status_code=404) from None
 from ame_backend.src.automation.self_healing import SelfHealingDaemon
 from ame_backend.src.automation.task_manager import TaskManager
 from ame_backend.src.database.database import Database
@@ -207,20 +194,19 @@ def emergency() -> dict:
 
 
 # ------------------------------------------------------------------ #
-# Servir el frontend (Next.js static export) desde el mismo origen que la API,
-# para que todo el sistema AURA cargue en la URL raiz de Render.
-# Se registra DESPUES de todas las rutas /api/*, /health, /dashboard
-# para que estas ganen y el SPA solo capture lo no-IAPI.
+# Servir el frontend (AURA UI / AmeAura, build de Vite) desde el mismo
+# origen que la API, para que todo el sistema AURA cargue en la URL raiz de
+# Render. Se registra DESPUES de todas las rutas /api/*, /health, /dashboard
+# para que estas ganen y el static solo capture lo no-IAPI (/, /assets).
 _STATIC_DIR = Path(__file__).resolve().parents[0] / "frontend_static"
-_SERVER_APP = _STATIC_DIR / "server" / "app"
 
-# Next.js static assets (_next/static) viven en frontend_static/static.
-if (_STATIC_DIR / "static").is_dir():
-    app.mount("/_next/static", StaticFiles(directory=str(_STATIC_DIR / "static")), name="next_static")
+# Assets compilados (JS/CSS) en /assets.
+if (_STATIC_DIR / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=str(_STATIC_DIR / "assets")), name="frontend_assets")
 
-# HTML prerenderizado del SPA (index.html, /integrations.html, etc.)
-if _SERVER_APP.is_dir():
-    app.mount("/", SPAStaticFiles(directory=str(_SERVER_APP), html=True), name="frontend_spa")
+# HTML de la SPA (index.html) en la raiz "/".
+if _STATIC_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=str(_STATIC_DIR), html=True), name="frontend_spa")
 
 # El telemetry_app expone /api/health, /api/status, etc. Se monta en
 # /api para no sombrear el SPA y coincidir con lo que llama el frontend.

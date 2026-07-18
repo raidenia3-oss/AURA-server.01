@@ -167,6 +167,8 @@ C:UsersUserDownloadsJARVISjarvis_hrz.py
 ame-backend/src/traffic/output/
 .vercel
 .env*
+!.env.example
+
 
 .next
 frontend/.next
@@ -175,8 +177,8 @@ frontend/.next
 # Frontend static build output (embedded in backend)
 
 
-# Build estatico del frontend servido por FastAPI
-
-# Build estatico del frontend servido por FastAPI (siempre versionado)
-ame_backend/src/frontend_static/**
+# Build estatico del frontend (AURA UI / AmeAura) servido por FastAPI
+# Siempre versionado: es el artefacto de produccion que va a Render/HF.
+!ame_backend/src/frontend_static/
 !ame_backend/src/frontend_static/**
+

@@ -1,5 +1,16 @@
 import { useEffect, useState } from "react";
-import { getHealth, listSessions, type HealthStatus, type SessionInfo } from "../services/api";
+import {
+    getHealth,
+    getStatus,
+    getActivity,
+    getBalance,
+    getSuccessRate,
+    type HealthStatus,
+    type BotStatus,
+    type ActivityLog,
+    type BalanceResponse,
+    type SuccessRateResponse,
+} from "../services/api";
 import KnowledgeBase from "./KnowledgeBase";
 
 export default function Sidebar({
@@ -13,23 +24,33 @@ export default function Sidebar({
     provider: string;
     onProviderChange: (v: string) => void;
 }) {
-    const [sessions, setSessions] = useState<SessionInfo[]>([]);
+    const [bots, setBots] = useState<BotStatus[]>([]);
     const [health, setHealth] = useState<HealthStatus | null>(null);
+    const [activity, setActivity] = useState<ActivityLog[]>([]);
+    const [balance, setBalance] = useState<BalanceResponse | null>(null);
+    const [success, setSuccess] = useState<SuccessRateResponse | null>(null);
     const [showKb, setShowKb] = useState(false);
 
     useEffect(() => {
         getHealth()
             .then(setHealth)
             .catch(() => setHealth(null));
-        listSessions()
-            .then(setSessions)
-            .catch(() => setSessions([]));
+        getStatus()
+            .then(setBots)
+            .catch(() => setBots([]));
+        getActivity(5)
+            .then(setActivity)
+            .catch(() => setActivity([]));
+        getBalance()
+            .then(setBalance)
+            .catch(() => setBalance(null));
+        getSuccessRate()
+            .then(setSuccess)
+            .catch(() => setSuccess(null));
     }, []);
 
-    const availableProviders = health
-        ? Object.entries(health.providers).filter(([, v]) => v.status === "ok").length
-        : 0;
-    const totalProviders = health ? Object.keys(health.providers).length : 0;
+    const aiOk = health?.ai ? Object.values(health.ai).filter((v) => v.ok).length : 0;
+    const aiTotal = health?.ai ? Object.keys(health.ai).length : 0;
 
     return (
         <aside className="bg-aura-panel border-r border-white/5 flex flex-col h-full overflow-y-auto">
@@ -97,41 +118,75 @@ export default function Sidebar({
                         <p className="flex justify-between">
                             <span className="text-aura-muted">IA disponibles</span>
                             <span className="text-white">
-                                {availableProviders}/{totalProviders}
+                                {aiOk}/{aiTotal}
                             </span>
                         </p>
-                        {health?.providers?.ollama && (
+                        {balance && (
                             <p className="flex justify-between">
-                                <span className="text-aura-muted">Ollama</span>
-                                <span
-                                    className={
-                                        health.providers.ollama.status === "ok"
-                                            ? "text-aura-green"
-                                            : "text-red-400"
-                                    }
-                                >
-                                    {health.providers.ollama.status === "ok" ? "✅" : "❌"}
+                                <span className="text-aura-muted">Balance</span>
+                                <span className="text-white">
+                                    {balance.total_balance.toFixed(2)} {balance.currency}
+                                </span>
+                            </p>
+                        )}
+                        {success && (
+                            <p className="flex justify-between">
+                                <span className="text-aura-muted">Tasa éxito</span>
+                                <span className="text-white">
+                                    {(success.rate * 100).toFixed(1)}%
                                 </span>
                             </p>
                         )}
                     </div>
                 </div>
 
-                {/* Sessions */}
+                {/* Bots / Módulos */}
                 <div className="border-t border-white/5 pt-4">
                     <h3 className="text-xs font-semibold uppercase tracking-wider text-aura-muted mb-2">
-                        💬 Sesiones
+                        🤖 Módulos
                     </h3>
                     <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {sessions.length === 0 && (
-                            <p className="text-xs text-aura-muted">Sin sesiones aún</p>
+                        {bots.length === 0 && (
+                            <p className="text-xs text-aura-muted">Sin módulos aún</p>
                         )}
-                        {sessions.map((s) => (
+                        {bots.map((b) => (
                             <div
-                                key={s.session_id}
-                                className="text-xs text-aura-muted bg-aura-bg rounded px-2 py-1 truncate"
+                                key={b.id}
+                                className="text-xs text-aura-muted bg-aura-bg rounded px-2 py-1 flex justify-between"
                             >
-                                #{s.session_id} · {s.messages_count} msgs · {s.last_role}
+                                <span className="truncate">{b.name}</span>
+                                <span
+                                    className={
+                                        b.status === "Running"
+                                            ? "text-aura-green"
+                                            : b.status === "Blocked"
+                                              ? "text-red-400"
+                                              : "text-aura-muted"
+                                    }
+                                >
+                                    {b.status}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Actividad */}
+                <div className="border-t border-white/5 pt-4">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-aura-muted mb-2">
+                        📡 Actividad
+                    </h3>
+                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {activity.length === 0 && (
+                            <p className="text-xs text-aura-muted">Sin eventos</p>
+                        )}
+                        {activity.map((log, i) => (
+                            <div
+                                key={`${log.ts}-${i}`}
+                                className="text-xs bg-aura-bg rounded px-2 py-1"
+                            >
+                                <span className="text-aura-cyan">[{log.level}]</span>{" "}
+                                <span className="text-aura-muted">{log.message}</span>
                             </div>
                         ))}
                     </div>

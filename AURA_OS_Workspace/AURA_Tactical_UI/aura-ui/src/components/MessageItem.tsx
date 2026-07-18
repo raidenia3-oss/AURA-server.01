@@ -5,23 +5,12 @@ export interface MessageData {
     role: "user" | "assistant";
     content: string;
     provider?: string;
-    tool?: string | null;
-    toolOutput?: Record<string, unknown> | null;
     isStreaming?: boolean;
     image?: string | null;
 }
 
-export default function MessageItem({
-    msg,
-    onApproveShell,
-    onRejectShell,
-}: {
-    msg: MessageData;
-    onApproveShell?: () => void;
-    onRejectShell?: () => void;
-}) {
+export default function MessageItem({ msg }: { msg: MessageData }) {
     const isUser = msg.role === "user";
-    const isPendingShell = msg.role === "assistant" && msg.content.includes("⚠️");
 
     const providerBadge = (p: string) => {
         const map: Record<string, string> = {
@@ -76,36 +65,6 @@ export default function MessageItem({
                     <span className="text-[10px] text-aura-muted px-1">
                         {providerBadge(msg.provider)}
                     </span>
-                )}
-
-                {/* Tool usage */}
-                {!isUser && msg.tool && (
-                    <details className="text-xs text-aura-muted bg-aura-bg rounded-lg px-2 py-1 border border-white/5">
-                        <summary className="cursor-pointer text-aura-cyan">🛠️ {msg.tool}</summary>
-                        {msg.toolOutput && (
-                            <pre className="mt-1 overflow-x-auto text-[10px] text-gray-400">
-                                {JSON.stringify(msg.toolOutput, null, 2)}
-                            </pre>
-                        )}
-                    </details>
-                )}
-
-                {/* Shell auth */}
-                {isPendingShell && (
-                    <div className="flex gap-2 mt-1">
-                        <button
-                            onClick={onApproveShell}
-                            className="px-3 py-1 text-xs bg-green-600/20 text-green-400 border border-green-600/40 rounded-lg"
-                        >
-                            ✅ Aprobar
-                        </button>
-                        <button
-                            onClick={onRejectShell}
-                            className="px-3 py-1 text-xs bg-red-600/20 text-red-400 border border-red-600/40 rounded-lg"
-                        >
-                            ❌ Rechazar
-                        </button>
-                    </div>
                 )}
             </div>
         </motion.div>

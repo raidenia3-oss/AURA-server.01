@@ -1,115 +1,108 @@
-const BASE = "http://localhost:8000";
+// AURA UI service layer.
+// Punto único de conexión con el backend de producción (FastAPI en Render).
+// La URL base se resuelve en este orden:
+//   1. import.meta.env.NEXT_PUBLIC_BACKEND_URL (define en .env)
+//   2. variable de entorno del navegador (window)
+//   3. fallback a la URL de producción conocida
+//   4. localhost:8000 (solo para desarrollo local)
+
+function resolveBase(): string {
+    const fromEnv = (import.meta as any).env?.NEXT_PUBLIC_BACKEND_URL;
+    if (fromEnv && typeof fromEnv === "string" && fromEnv.trim()) {
+        return fromEnv.replace(/\/+$/, "");
+    }
+    if (typeof window !== "undefined") {
+        const w = window as any;
+        if (w.NEXT_PUBLIC_BACKEND_URL) return String(w.NEXT_PUBLIC_BACKEND_URL).replace(/\/+$/, "");
+    }
+    // Producción: mismo origen si se sirve desde el backend, o URL fija de Render.
+    if (typeof window !== "undefined" && window.location && window.location.hostname !== "localhost") {
+        return "";
+    }
+    return "http://localhost:8000";
+}
+
+const BASE = resolveBase();
+
+function url(path: string): string {
+    if (!BASE) return path; // mismo origen (servido por FastAPI)
+    return `${BASE}${path}`;
+}
 
 export interface HealthStatus {
     status: string;
-    providers: Record<string, { status: string; latency_s: number | null }>;
+    ai?: Record<string, { ok: boolean; latency_ms?: number; status?: number; error?: string }>;
 }
 
 export interface ChatResult {
-    session_id: number;
-    response: string;
-    provider_used: string;
-    intention: string;
-    tool_used: string | null;
-    tool_output: Record<string, unknown> | null;
-    tool_pending: { tool: string; args: Record<string, unknown> } | null;
-    tool_risky: boolean | null;
-    rag_used: boolean;
+    reply: string;
+    provider?: string;
+    intent?: Record<string, unknown> | null;
+    task_status?: unknown;
 }
 
-export interface SessionInfo {
-    session_id: number;
-    messages_count: number;
-    last_role: string;
-    last_ts: string;
-}
-
-export interface IngestResult {
+export interface BotStatus {
+    id: string;
+    name: string;
     status: string;
-    doc_id: string;
-    chunks: number;
-    total_chars: number;
-    total_in_db: number;
+}
+
+export interface ActivityLog {
+    ts: string;
+    level: string;
+    message: string;
+}
+
+export interface BalanceResponse {
+    total_balance: number;
+    currency: string;
+}
+
+export interface SuccessRateResponse {
+    rate: number;
+    total_tasks: number;
+    successful_tasks: number;
 }
 
 export async function getHealth(): Promise<HealthStatus> {
-    const res = await fetch(`${BASE}/health`);
+    const res = await fetch(url("/health"));
+    if (!res.ok) throw new Error(`health ${res.status}`);
     return res.json();
-}
-
-export async function listSessions(limit = 50): Promise<SessionInfo[]> {
-    const res = await fetch(`${BASE}/sessions?limit=${limit}`);
-    const data = await res.json();
-    return data.sessions ?? [];
 }
 
 export async function sendChat(
     message: string,
-    sessionId?: number,
-    persona?: string,
-    provider?: string,
-    toolAuthorized?: Record<string, unknown>,
+    context?: string,
 ): Promise<ChatResult> {
-    const res = await fetch(`${BASE}/chat`, {
+    const res = await fetch(url("/api/chat"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            message,
-            session_id: sessionId ?? null,
-            persona: persona ?? null,
-            provider: provider ?? null,
-            tool_authorized: toolAuthorized ?? null,
-        }),
+        body: JSON.stringify({ prompt: message, context: context ?? null }),
     });
+    if (!res.ok) throw new Error(`chat ${res.status}`);
     return res.json();
 }
 
-export async function ingestText(text: string, source = "ui-manual"): Promise<IngestResult> {
-    const res = await fetch(`${BASE}/ingest-text`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, source }),
-    });
+export async function getStatus(): Promise<BotStatus[]> {
+    const res = await fetch(url("/api/status"));
+    if (!res.ok) throw new Error(`status ${res.status}`);
     return res.json();
 }
 
-export async function getKnowledgeStats(): Promise<{ total_entries: number }> {
-    const res = await fetch(`${BASE}/knowledge/stats`);
+export async function getActivity(limit = 5): Promise<ActivityLog[]> {
+    const res = await fetch(url(`/api/activity?limit=${limit}`));
+    if (!res.ok) throw new Error(`activity ${res.status}`);
     return res.json();
 }
 
-export async function analyzeImage(
-    imageBase64: string,
-    prompt: string,
-    sessionId?: number,
-): Promise<{
-    session_id: number;
-    response: string;
-    provider_used: string;
-}> {
-    const res = await fetch(`${BASE}/analyze-image`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_base64: imageBase64, prompt, session_id: sessionId }),
-    });
+export async function getBalance(): Promise<BalanceResponse> {
+    const res = await fetch(url("/api/balance"));
+    if (!res.ok) throw new Error(`balance ${res.status}`);
     return res.json();
 }
 
-export async function transcribeAudio(
-    file: File,
-    prompt?: string,
-): Promise<{
-    session_id: number;
-    transcription: string;
-    provider: string;
-}> {
-    const form = new FormData();
-    form.append("file", file);
-    if (prompt) form.append("prompt", prompt);
-
-    const res = await fetch(`${BASE}/transcribe`, {
-        method: "POST",
-        body: form,
-    });
+export async function getSuccessRate(): Promise<SuccessRateResponse> {
+    const res = await fetch(url("/api/success-rate"));
+    if (!res.ok) throw new Error(`success-rate ${res.status}`);
     return res.json();
 }

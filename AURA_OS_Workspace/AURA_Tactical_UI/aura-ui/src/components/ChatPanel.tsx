@@ -1,16 +1,13 @@
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { analyzeImage, sendChat, transcribeAudio } from "../services/api";
+import { sendChat, type ChatResult } from "../services/api";
 import MessageItem, { MessageData } from "./MessageItem";
 
 export default function ChatPanel({ persona, provider }: { persona: string; provider: string }) {
     const [messages, setMessages] = useState<MessageData[]>([]);
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
-    const [sessionId, setSessionId] = useState<number | undefined>(undefined);
-    const [pendingImage, setPendingImage] = useState<string | null>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -18,19 +15,17 @@ export default function ChatPanel({ persona, provider }: { persona: string; prov
 
     const send = useCallback(async () => {
         const text = input.trim();
-        if (!text && !pendingImage) return;
+        if (!text) return;
         if (loading) return;
 
         const userMsg: MessageData = {
             id: `user-${Date.now()}`,
             role: "user",
-            content: pendingImage ? text || "(Imagen adjunta)" : text,
-            image: pendingImage || undefined,
+            content: text,
         };
         setMessages((m) => [...m, userMsg]);
         setInput("");
         setLoading(true);
-        setPendingImage(null);
 
         const streamId = `stream-${Date.now()}`;
         setMessages((m) => [
@@ -39,62 +34,15 @@ export default function ChatPanel({ persona, provider }: { persona: string; prov
         ]);
 
         try {
-            let result: {
-                session_id: number;
-                response?: string;
-                provider_used?: string;
-                tool_used?: string | null;
-                tool_output?: Record<string, unknown> | null;
-            };
-
-            if (pendingImage) {
-                const prompt =
-                    text ||
-                    "Describe esta imagen con el mayor detalle posible. Si hay texto, transcribelo. Si hay elementos visuales relevantes, identificalos.";
-                const imgResult = (await analyzeImage(
-                    pendingImage,
-                    prompt,
-                    sessionId,
-                )) as unknown as {
-                    session_id: number;
-                    response: string;
-                    provider_used: string;
-                };
-                setSessionId(imgResult.session_id);
-                result = {
-                    session_id: imgResult.session_id,
-                    response: imgResult.response,
-                    provider_used: imgResult.provider_used,
-                    tool_used: null,
-                    tool_output: null,
-                };
-            } else {
-                const chatResult = await sendChat(
-                    text,
-                    sessionId,
-                    persona,
-                    provider !== "Automático" ? provider : undefined,
-                );
-                setSessionId(chatResult.session_id);
-                result = {
-                    session_id: chatResult.session_id,
-                    response: chatResult.response,
-                    provider_used: chatResult.provider_used,
-                    tool_used: chatResult.tool_used,
-                    tool_output: chatResult.tool_output ?? undefined,
-                };
-            }
-
+            const result: ChatResult = await sendChat(text, persona);
             setMessages((m) =>
                 m.map((msg) =>
                     msg.id === streamId
                         ? {
                               id: `assistant-${Date.now()}`,
                               role: "assistant",
-                              content: result?.response || "Sin respuesta",
-                              provider: result?.provider_used,
-                              tool: result?.tool_used,
-                              toolOutput: result?.tool_output ?? undefined,
+                              content: result?.reply || "Sin respuesta",
+                              provider: result?.provider,
                           }
                         : msg,
                 ),
@@ -110,7 +58,7 @@ export default function ChatPanel({ persona, provider }: { persona: string; prov
         } finally {
             setLoading(false);
         }
-    }, [input, loading, sessionId, persona, provider, pendingImage]);
+    }, [input, loading, persona, provider]);
 
     return (
         <div className="flex flex-col h-full">
@@ -142,49 +90,7 @@ export default function ChatPanel({ persona, provider }: { persona: string; prov
 
             {/* Input */}
             <div className="p-4 border-t border-white/5 space-y-2">
-                {pendingImage && (
-                    <div className="flex items-center gap-2">
-                        <img
-                            src={pendingImage}
-                            alt="Vista previa"
-                            className="h-12 w-auto rounded border border-white/10"
-                        />
-                        <button
-                            onClick={() => setPendingImage(null)}
-                            className="text-xs text-red-400 hover:text-red-300"
-                        >
-                            ✕
-                        </button>
-                    </div>
-                )}
                 <div className="flex gap-2">
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*,audio/*"
-                        className="hidden"
-                        onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            if (file.type.startsWith("audio/")) {
-                                await transcribeAudio(file);
-                                return;
-                            }
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                                const b64 = (reader.result as string).split(",")[1];
-                                setPendingImage(b64);
-                            };
-                            reader.readAsDataURL(file);
-                        }}
-                    />
-                    <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="px-3 py-2 bg-aura-bg border border-white/10 rounded-xl text-sm hover:border-aura-cyan/50 transition"
-                        title="Adjuntar imagen o audio"
-                    >
-                        📎
-                    </button>
                     <input
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
@@ -195,7 +101,7 @@ export default function ChatPanel({ persona, provider }: { persona: string; prov
                     />
                     <button
                         onClick={send}
-                        disabled={loading || (!input.trim() && !pendingImage)}
+                        disabled={loading || !input.trim()}
                         className="px-5 py-2.5 bg-aura-cyan/20 border border-aura-cyan/40 text-aura-cyan rounded-xl text-sm hover:bg-aura-cyan/30 transition disabled:opacity-40"
                     >
                         {loading ? "..." : "Enviar"}
