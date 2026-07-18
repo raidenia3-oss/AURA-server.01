@@ -5,11 +5,13 @@ import {
     getActivity,
     getBalance,
     getSuccessRate,
+    getNeuralStatus,
     type HealthStatus,
     type BotStatus,
     type ActivityLog,
     type BalanceResponse,
     type SuccessRateResponse,
+    type NeuralStatus,
 } from "../services/api";
 import KnowledgeBase from "./KnowledgeBase";
 
@@ -29,6 +31,7 @@ export default function Sidebar({
     const [activity, setActivity] = useState<ActivityLog[]>([]);
     const [balance, setBalance] = useState<BalanceResponse | null>(null);
     const [success, setSuccess] = useState<SuccessRateResponse | null>(null);
+    const [neural, setNeural] = useState<NeuralStatus | null>(null);
     const [showKb, setShowKb] = useState(false);
 
     useEffect(() => {
@@ -47,6 +50,19 @@ export default function Sidebar({
         getSuccessRate()
             .then(setSuccess)
             .catch(() => setSuccess(null));
+        getNeuralStatus()
+            .then(setNeural)
+            .catch(() => setNeural(null));
+    }, []);
+
+    // Refresco en vivo del Núcleo Evolutivo (cada 5 s).
+    useEffect(() => {
+        const id = setInterval(() => {
+            getNeuralStatus()
+                .then(setNeural)
+                .catch(() => {});
+        }, 5000);
+        return () => clearInterval(id);
     }, []);
 
     const aiOk = health?.ai ? Object.values(health.ai).filter((v) => v.ok).length : 0;
@@ -191,6 +207,48 @@ export default function Sidebar({
                         ))}
                     </div>
                 </div>
+
+                {/* Núcleo Evolutivo */}
+                {neural && (
+                    <div className="border-t border-white/5 pt-4">
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-aura-muted mb-2">
+                            🧠 Núcleo Evolutivo
+                        </h3>
+                        <div className="space-y-1 text-xs">
+                            <p className="flex justify-between">
+                                <span className="text-aura-muted">Estabilidad</span>
+                                <span
+                                    className={
+                                        neural.last_tick.stability >= neural.neural.threshold
+                                            ? "text-aura-green"
+                                            : "text-red-400"
+                                    }
+                                >
+                                    {(neural.last_tick.stability * 100).toFixed(1)}%
+                                </span>
+                            </p>
+                            <p className="flex justify-between">
+                                <span className="text-aura-muted">Iteraciones</span>
+                                <span className="text-white">{neural.neural.iterations}</span>
+                            </p>
+                            <p className="flex justify-between">
+                                <span className="text-aura-muted">Keep-alive</span>
+                                <span className="text-white">{neural.neural.keep_alive_fired}</span>
+                            </p>
+                            <p className="flex justify-between">
+                                <span className="text-aura-muted">Memoria</span>
+                                <span className="text-white">
+                                    {neural.sys_vitals.memory_percent.toFixed(0)}%
+                                </span>
+                            </p>
+                            {neural.last_tick.real_inactivity && (
+                                <p className="text-red-400 text-[10px]">
+                                    ⚠️ Inactividad detectada → keep-alive
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* Knowledge Base toggle */}
                 <div className="border-t border-white/5 pt-4">

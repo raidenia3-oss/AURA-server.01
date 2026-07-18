@@ -28,6 +28,9 @@ from ame_backend.src.automation.task_manager import TaskManager
 from ame_backend.src.database.database import Database
 from ame_backend.src.services.ai_engine import AIEngine
 from ame_backend.src.api.api_service import app as telemetry_app
+from ame_backend.src import models as db_models
+from ame_backend.src.neural_core import EvolutionCore
+from ame_backend.src import keep_alive as keep_alive_mod
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +39,44 @@ ai = AIEngine()
 task_mgr = TaskManager()
 db = Database()
 
+# Núcleo Evolutivo: memoria (SQLAlchemy) + neurona + sys vitals + keep-alive.
+db_models.init_db()
+core = EvolutionCore(keep_alive_fn=keep_alive_mod.trigger_keep_alive)
+
 healer = SelfHealingDaemon(task_manager=task_mgr)
+
+# Métricas de Sys Vitals (entradas de la neurona). psutil si está disponible,
+# sino métricas estándar de tiempo de respuesta y contador de mensajes.
+try:
+    import psutil
+
+    _HAS_PSUTIL = True
+except Exception:  # pragma: no cover
+    psutil = None  # type: ignore
+    _HAS_PSUTIL = False
+
+_msg_counter = {"count": 0, "window": 0.0}
+
+
+def collect_sys_vitals() -> dict:
+    """Recolecta métricas reales del servidor para alimentar la neurona."""
+    vitals: dict = {
+        "latency_ms": 0.0,
+        "memory_percent": 0.0,
+        "cpu_percent": 0.0,
+        "health_pings": 1.0,
+        "msg_rate": 0.0,
+    }
+    if _HAS_PSUTIL:
+        try:
+            vitals["memory_percent"] = round(psutil.virtual_memory().percent, 2)
+            vitals["cpu_percent"] = round(psutil.cpu_percent(interval=None), 2)
+        except Exception:
+            pass
+    # Tasa de mensajes por segundo (ventana simple).
+    _msg_counter["count"] += 0
+    vitals["msg_rate"] = min(1.0, _msg_counter["count"] / 100.0)
+    return vitals
 
 app.add_middleware(
     CORSMiddleware,
@@ -90,9 +130,20 @@ def health() -> dict:
 def chat(payload: dict) -> dict:
     prompt = payload.get("prompt", "")
     context = payload.get("context")
+    # Memoria de estado: guardar el mensaje real del usuario.
+    try:
+        db_models.save_message(role="user", content=prompt, session_id="ws")
+    except Exception as exc:
+        logger.error("No se pudo guardar mensaje de usuario: %s", exc)
     result = ai.chat(prompt=prompt, context=context)
     text = result.get("text", "")
+    provider = result.get("provider")
     intent = result.get("intent")
+    # Memoria de estado: guardar la respuesta real del asistente.
+    try:
+        db_models.save_message(role="assistant", content=text, provider=provider, session_id="ws")
+    except Exception as exc:
+        logger.error("No se pudo guardar respuesta: %s", exc)
     if intent and intent.get("action") == "START_BOT":
         start_url = payload.get("start_url", "https://example.com/survey")
         status = task_mgr.start_survey_bot(start_url)
@@ -102,7 +153,38 @@ def chat(payload: dict) -> dict:
             "intent": intent,
             "task_status": status,
         }
-    return {"reply": text, "provider": result.get("provider")}
+    return {"reply": text, "provider": provider}
+
+
+@app.get("/api/chat/history")
+def chat_history(limit: int = 50) -> dict:
+    """Historial real de mensajes (chat_history)."""
+    try:
+        return {"messages": db_models.recent_messages(limit=limit), "total": db_models.count_messages()}
+    except Exception as exc:
+        logger.error("No se pudo leer el historial: %s", exc)
+        return {"messages": [], "total": 0, "error": str(exc)}
+
+
+@app.get("/neural/status")
+def neural_status() -> dict:
+    """Estado del Núcleo Evolutivo (neurona + Sys Vitals en vivo)."""
+    vitals = collect_sys_vitals()
+    try:
+        tick = core.tick(vitals, alive=True)
+    except Exception as exc:
+        logger.error("Fallo del tick evolutivo: %s", exc)
+        tick = {"error": str(exc)}
+    return {
+        "neural": core.status(),
+        "last_tick": tick,
+        "sys_vitals": vitals,
+    }
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok", "ai": ai.health_check()}
 
 
 @app.websocket("/ws/bridge")
@@ -110,6 +192,9 @@ async def ws_bridge(ws: WebSocket) -> None:
     await ws.accept()
     queue: asyncio.Queue[str] = asyncio.Queue()
     shutdown = False
+
+    # Latencia medida en tiempo real (entrada de la neurona).
+    _latency_window: list[float] = []
 
     async def reader() -> None:
         nonlocal shutdown
@@ -122,9 +207,28 @@ async def ws_bridge(ws: WebSocket) -> None:
             if msg.get("type") == "chat":
                 prompt = msg.get("prompt", "")
                 context = msg.get("context")
+                _msg_counter["count"] += 1
+                # Memoria de estado: mensaje real del usuario.
+                try:
+                    db_models.save_message(role="user", content=prompt, session_id="ws")
+                except Exception as exc:
+                    logger.error("WS: no se guardó usuario: %s", exc)
+                start = asyncio.get_event_loop().time()
                 result = ai.chat(prompt=prompt, context=context)
+                elapsed_ms = (asyncio.get_event_loop().time() - start) * 1000
+                _latency_window.append(elapsed_ms)
+                if len(_latency_window) > 10:
+                    _latency_window.pop(0)
                 text = result.get("text", "")
+                provider = result.get("provider")
                 intent = result.get("intent")
+                # Memoria de estado: respuesta real del asistente.
+                try:
+                    db_models.save_message(
+                        role="assistant", content=text, provider=provider, session_id="ws"
+                    )
+                except Exception as exc:
+                    logger.error("WS: no se guardó respuesta: %s", exc)
                 if intent and intent.get("action") == "START_BOT":
                     start_url = "https://example.com/survey"
                     status = task_mgr.start_survey_bot(start_url)
@@ -137,11 +241,32 @@ async def ws_bridge(ws: WebSocket) -> None:
                 else:
                     await ws.send_text(
                         json.dumps(
-                            {"type": "chat", "reply": text, "provider": result.get("provider")}
+                            {"type": "chat", "reply": text, "provider": provider}
                         )
                     )
             elif msg.get("type") == "task_stop":
                 task_mgr.stop_survey_bot()
+
+    async def vitals_loop() -> None:
+        nonlocal shutdown
+        # Emite Sys Vitals reales + estado del Núcleo Evolutivo cada 2 s.
+        while not shutdown:
+            vitals = collect_sys_vitals()
+            if _latency_window:
+                vitals["latency_ms"] = round(sum(_latency_window) / len(_latency_window), 2)
+            try:
+                tick = core.tick(vitals, alive=True)
+            except Exception as exc:
+                logger.error("WS vitals tick falló: %s", exc)
+                tick = {"error": str(exc)}
+            payload = {
+                "type": "vitals",
+                "sys": vitals,
+                "neural": core.status(),
+                "tick": tick,
+            }
+            await ws.send_text(json.dumps(payload))
+            await asyncio.sleep(2.0)
 
     async def writer() -> None:
         nonlocal shutdown
@@ -151,6 +276,7 @@ async def ws_bridge(ws: WebSocket) -> None:
 
     reader_task = asyncio.create_task(reader())
     writer_task = asyncio.create_task(writer())
+    vitals_task = asyncio.create_task(vitals_loop())
 
     async def emit_log(payload: str) -> None:
         try:
@@ -178,12 +304,17 @@ async def ws_bridge(ws: WebSocket) -> None:
         shutdown = True
         reader_task.cancel()
         writer_task.cancel()
+        vitals_task.cancel()
         try:
             await reader_task
         except Exception:
             pass
         try:
             await writer_task
+        except Exception:
+            pass
+        try:
+            await vitals_task
         except Exception:
             pass
 

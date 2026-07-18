@@ -106,3 +106,55 @@ export async function getSuccessRate(): Promise<SuccessRateResponse> {
     if (!res.ok) throw new Error(`success-rate ${res.status}`);
     return res.json();
 }
+
+export interface NeuralStatus {
+    neural: {
+        weights: number[];
+        bias: number;
+        learning_rate: number;
+        iterations: number;
+        last_stability: number | null;
+        last_error: number | null;
+        keep_alive_fired: number;
+        threshold: number;
+    };
+    last_tick: {
+        stability: number;
+        instability: boolean;
+        real_inactivity: boolean;
+        keep_alive_fired: number;
+        train_error: number;
+    };
+    sys_vitals: {
+        latency_ms: number;
+        memory_percent: number;
+        cpu_percent: number;
+        health_pings: number;
+        msg_rate: number;
+    };
+}
+
+export async function getNeuralStatus(): Promise<NeuralStatus> {
+    const res = await fetch(url("/neural/status"));
+    if (!res.ok) throw new Error(`neural-status ${res.status}`);
+    return res.json();
+}
+
+export interface ChatHistory {
+    messages: {
+        id: number;
+        role: string;
+        content: string;
+        provider: string | null;
+        session_id: string | null;
+        created_at: string | null;
+    }[];
+    total: number;
+}
+
+export async function getChatHistory(limit = 50): Promise<ChatHistory> {
+    const res = await fetch(url(`/api/chat/history?limit=${limit}`));
+    if (!res.ok) throw new Error(`chat-history ${res.status}`);
+    return res.json();
+}
+
