@@ -20,6 +20,7 @@ import urllib.request
 DEFAULT_URL = "https://aura-backend-qwhl.onrender.com"
 HEALTH_PATH = "/health"
 TIMEOUT = 60
+LOOP_INTERVAL_SECONDS = 14 * 60  # 14 minutos: evita el cold-sleep del plan free
 
 
 def ping(base_url: str) -> None:
@@ -46,6 +47,20 @@ def ping(base_url: str) -> None:
         print(f">>> FAIL: no se pudo conectar ({elapsed_ms:.0f} ms): {exc}")
 
 
+def loop(base_url: str) -> None:
+    print(f">>> MODO BUCLE (keep-alive): ping cada 14 min a {base_url}")
+    print(f">>> Ctrl+C para detener.")
+    while True:
+        ping(base_url)
+        print(f">>> Próximo ping en {LOOP_INTERVAL_SECONDS // 60} min...")
+        time.sleep(LOOP_INTERVAL_SECONDS)
+
+
 if __name__ == "__main__":
-    target = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_URL
-    ping(target)
+    args = [a for a in sys.argv[1:] if a != "--loop"]
+    loop_mode = "--loop" in sys.argv[1:]
+    target = args[0] if args else DEFAULT_URL
+    if loop_mode:
+        loop(target)
+    else:
+        ping(target)
