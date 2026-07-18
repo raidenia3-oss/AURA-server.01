@@ -14,18 +14,28 @@ services:
     region: oregon
     branch: main
     dockerfilePath: ./Dockerfile
-    healthCheckPath: /health
+        healthCheckPath: /health
     autoDeploy: true
     envVars:
-      - key: JWT_SECRET_ADMIN
-        sync: false
+      # --- Críticas (sin fallback en código, la app no arranca si faltan) ---
       - key: JWT_SECRET
+        sync: false
+      - key: JWT_SECRET_ADMIN
         sync: false
       - key: BRIDGE_SECRET
         sync: false
+      # --- APIs de IA (al menos una para procesar datos reales) ---
       - key: GEMINI_API_KEY
         sync: false
       - key: GROQ_API_KEY
         sync: false
       - key: OPENROUTER_API_KEY
         sync: false
+      # --- Opcionales (tienen defaults sensatos en el código) ---
+      - key: DATABASE_URL
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+
