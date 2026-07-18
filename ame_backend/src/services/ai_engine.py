@@ -52,10 +52,16 @@ class AIEngine:
                 "api_key": None,
                 "timeout": int(os.getenv("LM_STUDIO_TIMEOUT", "60")),
             },
+            "local_lfm": {
+                "url": os.getenv("LOCAL_LFM_BASE_URL", "http://ai-engine-local:11434"),
+                "model": os.getenv("LOCAL_LFM_MODEL", "lfm2.5:latest"),
+                "api_key": None,
+                "timeout": int(os.getenv("LOCAL_LFM_TIMEOUT", "120")),
+            },
         }
         self.preference = os.getenv(
             "AI_PROVIDER_PREFERENCE", "auto"
-        )  # auto | gemini | groq | openrouter | lm_studio
+        )  # auto | gemini | groq | openrouter | lm_studio | local_lfm
         self.session = self._build_session()
         self._intent_pattern = re.compile(
             r"(?:inicia|arranca|empieza|start|run|activa)\s+(?:el\s+)?(?:bot\s+)?(?:de\s+)?(?:las\s+)?(?:encuestas|survey|granja|farm)",
@@ -156,7 +162,7 @@ class AIEngine:
                 f"{cfg['url']}/models/{model_override or cfg['model']}:generateContent?key={cfg['api_key']}",
                 {"contents": self._contents(prompt, context)},
             )
-        if provider in ("groq", "openrouter", "lm_studio"):
+        if provider in ("groq", "openrouter", "lm_studio", "local_lfm"):
             return self._call_openai_compat(
                 f"{cfg['url']}/chat/completions",
                 {
