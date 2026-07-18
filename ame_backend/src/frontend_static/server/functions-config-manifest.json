@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "functions": {
+    "/api/discord/webhook": {},
+    "/api/integrations/status": {},
+    "/api/health": {},
+    "/api/skills/browser-control": {},
+    "/api/slack/events": {},
+    "/api/admin/servers": {},
+    "/api/slack/install": {},
+    "/api/teams": {},
+    "/api/logs": {},
+    "/api/telegram/webhook": {},
+    "/api/webhooks": {}
+  }
+}
