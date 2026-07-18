@@ -17,7 +17,7 @@ import time
 import urllib.error
 import urllib.request
 
-DEFAULT_URL = "https://aura-backend.onrender.com"
+DEFAULT_URL = "https://aura-backend-qwhl.onrender.com"
 HEALTH_PATH = "/health"
 TIMEOUT = 60
 
