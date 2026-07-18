@@ -80,15 +80,19 @@ def dashboard() -> str:
 
 # Serve the built frontend (Next.js static export) from the same origin
 # as the API, so the whole AURA system loads at the Render root URL.
-# These mounts are registered BEFORE app.mount("/", telemetry_app) so the
-# explicit /api/*, /health and /dashboard routes above still win.
+# Registered BEFORE app.mount("/", telemetry_app) so the explicit
+# /api/*, /health and /dashboard routes above still win.
 _STATIC_DIR = Path(__file__).resolve().parents[0] / "frontend_static"
 _SERVER_APP = _STATIC_DIR / "server" / "app"
 
 
 @app.get("/{full_path:path}")
 def spa_fallback(full_path: str) -> HTMLResponse:
-    """SPA fallback: serve the matching prerendered HTML, else index.html."""
+    """SPA fallback: serve the matching prerendered HTML, else index.html.
+    Paths under /_next/ are handled by the StaticFiles mount below,
+    so we never mask real static assets here."""
+    if full_path.startswith("_next/"):
+        return HTMLResponse(b"404: not found", status_code=404)
     candidate = _SERVER_APP / full_path
     if candidate.is_file() and candidate.suffix == ".html":
         return HTMLResponse(candidate.read_bytes())
@@ -101,7 +105,8 @@ def spa_fallback(full_path: str) -> HTMLResponse:
     )
 
 
-# Next.js static assets (_next/static) live under frontend_static/static
+# Next.js static assets (_next/static) live under frontend_static/static.
+# Mounted before spa_fallback so real assets are served, not the SPA fallback.
 if (_STATIC_DIR / "static").is_dir():
     app.mount("/_next/static", StaticFiles(directory=str(_STATIC_DIR / "static")), name="next_static")
 
