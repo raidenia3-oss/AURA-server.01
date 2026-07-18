@@ -21,6 +21,7 @@ AURA/AME es un ecosistema integrado para gestión autónoma de noticias, automat
 3. Render detectará automáticamente `render.yaml` y creará el servicio
 4. En el dashboard, agrega la variable `JWT_SECRET_ADMIN` con un valor secreto
 5. Tu backend estará disponible en `https://aura-backend.onrender.com` en minutos
+   (URL de producción confirmada: `https://aura-backend.onrender.com`)
 6. Health check automático en `/health` cada 30 segundos
 
 ### Opción 2: Oracle Cloud VPS (Free Tier)
@@ -450,5 +451,44 @@ El middleware ya está configurado para aceptar peticiones desde cualquier orige
        ↓
 dashboard_local.html  o  Google Sites  o  app React Native
 ```
+
+---
+
+## 🌐 Producción (Render — Live)
+
+El backend de AURA está desplegado 24/7 en Render usando el `Dockerfile` multietapa
+de la raíz del proyecto (`Python 3.11-slim` + `render.yaml` con `env: docker`).
+
+- **URL pública de producción:** `https://aura-backend.onrender.com`
+- **Health check:** `https://aura-backend.onrender.com/health` (responde `{"status":"ok",...}`)
+- **Dashboard dinámico:** `https://aura-backend.onrender.com/dashboard`
+  (detecta automáticamente `window.location.origin`, funciona igual en local y en la nube)
+
+### Qué automatizamos con el Blueprint
+1. Render lee `render.yaml` y crea el servicio web `aura-backend` (`env: docker`, plan free, región oregon, branch `main`).
+2. Render construye la imagen desde el `Dockerfile` (sin `buildCommand` manual): instala `requirements.txt` en un venv y copia `ame_backend/` + `dashboard_local.html`.
+3. Expone el puerto `8000` y arranca con `uvicorn ame_backend.src.main:app --host 0.0.0.0 --port 8000`.
+4. Health check automático en `/health` cada 30s; auto-deploy en cada push a `origin/main`.
+
+### Variables de entorno requeridas
+Configúralas en el dashboard de Render (**Environment** → **Add Environment Variable**).
+Ninguna contiene secretos en el repo; solo se documenta la estructura.
+
+| Variable | Requerida | Descripción |
+|----------|-----------|-------------|
+| `JWT_SECRET_ADMIN` | ✅ Sí (`sync: false`) | Secreto para firmar/validar JWT de admin. Render lo pide al crear el servicio; define un valor seguro (el backend usa un fallback solo en dev). |
+| `DATABASE_URL` | ⬜ Opcional | Si apunta a `postgres://` o `mongodb+srv://`, el `Database` conecta el cliente externo (psycopg2 / pymongo). Si se omite, usa almacenamiento local en archivo. |
+| `PORT` | ⬜ Automático | Render asigna el puerto; el `Dockerfile` expone `8000` y uvicorn lo usa. |
+
+> Nota de CORS: el backend acepta `allow_origins=["*"]`, por lo que el dominio de
+> producción de Render (y cualquier frontend/Vercel/app móvil) puede consumir la API sin
+> configuración adicional. No se requieren cambios en el código para aceptar el nuevo dominio.
+
+### Conectar el frontend (Vercel) al backend de producción
+En las variables de entorno de Vercel define:
+```
+NEXT_PUBLIC_API_BASE=https://aura-backend.onrender.com
+```
+y redeploy. El dashboard local y la app React Native pueden apuntar a la misma URL.
 
 
