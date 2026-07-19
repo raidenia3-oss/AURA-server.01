@@ -48,9 +48,11 @@ class CronScheduler:
         discord_bridge: Any,
         broadcast_fn: Optional[Callable[[dict], Any]] = None,
         stability_provider: Optional[Callable[[], float]] = None,
+        rocket_bridge: Any = None,
     ) -> None:
         self.ai = ai_engine
         self.discord = discord_bridge
+        self.rocket = rocket_bridge
         self.broadcast = broadcast_fn
         self.get_stability = stability_provider
         self._tasks: List[asyncio.Task] = []
@@ -172,6 +174,11 @@ class CronScheduler:
                 self.discord.alert(message)
         except Exception as exc:
             logger.error("Cron Discord emit falló: %s", exc)
+        try:
+            if self.rocket is not None and getattr(self.rocket, "is_available", False):
+                self.rocket.alert(message)
+        except Exception as exc:
+            logger.error("Cron Rocket.Chat emit falló: %s", exc)
         try:
             if self.broadcast is not None:
                 coro = self.broadcast({"type": "cron", "text": message})

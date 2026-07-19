@@ -39,6 +39,7 @@ from ame_backend.src.tools.multi_model_router import MultiModelRouter
 from ame_backend.src.tools import orchestrator as orchestrator_mod
 from ame_backend.src import neural_telemetry
 from ame_backend.src.tools import discord_bot as discord_bridge_mod
+from ame_backend.src.tools import rocket_bridge as rocket_bridge_mod
 from ame_backend.src.tools import knowledge_ingest as knowledge_ingest_mod
 from ame_backend.src.tools import cron_scheduler as cron_mod
 from ame_backend.src.tools import agents_pool as agents_pool_mod
@@ -57,11 +58,16 @@ mesh_clients: set = set()
 # Puente Táctico de Discord (no bloquea el arranque si falta token/librería).
 discord_bridge = discord_bridge_mod.DiscordBridge(ai, router_engine)
 
+# Interfaz Soberana Definitiva: Puente de Rocket.Chat (REST/Webhooks).
+# No-op si no están configuradas ROCKET_CHAT_URL + credenciales/webhook.
+rocket_bridge = rocket_bridge_mod.RocketChatBridge(ai, router_engine)
+
 # Autonomia Total: Cron proactivo y Pool multi-agente (Cismas de Conciencia).
 cron_scheduler = cron_mod.CronScheduler(
     ai, discord_bridge,
     broadcast_fn=lambda payload: asyncio.ensure_future(broadcast_mesh(payload)),
     stability_provider=lambda: (core.last_stability or 1.0),
+    rocket_bridge=rocket_bridge,
 )
 agents_pool = agents_pool_mod.AgentsPool(ai, router_engine)
 
@@ -920,6 +926,7 @@ async def _neural_monitor_loop() -> None:
                     f"keep_alive={ka}). AURA manteniendo el sistema en línea."
                 )
                 discord_bridge.alert(msg)
+                rocket_bridge.alert(msg)
                 await broadcast_mesh_alert(msg)
                 last_alert = now
         except Exception as exc:
@@ -931,8 +938,9 @@ async def _neural_monitor_loop() -> None:
 async def on_startup() -> None:
     logger.info("AURA Backend starting up")
     await healer.start()
-    # Red Soberana: arrancar Discord bridge y monitor de neurona (no bloquean).
+    # Red Soberana: arrancar Discord bridge, Rocket.Chat y monitor de neurona.
     discord_bridge.start()
+    rocket_bridge.start()
     global _neural_monitor_task
     _neural_monitor_task = asyncio.create_task(
         _neural_monitor_loop(), name="neural-monitor"
@@ -950,6 +958,10 @@ async def on_shutdown() -> None:
         await discord_bridge.stop()
     except Exception as exc:
         logger.error("Error deteniendo Discord bridge: %s", exc)
+    try:
+        await rocket_bridge.stop()
+    except Exception as exc:
+        logger.error("Error deteniendo Rocket.Chat bridge: %s", exc)
     try:
         await cron_scheduler.stop()
     except Exception as exc:

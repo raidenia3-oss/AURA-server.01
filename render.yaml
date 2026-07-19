@@ -65,4 +65,17 @@ services:
         sync: false
       - key: RENDER_URL
         sync: false
+      # --- Interfaz Soberana Definitiva: Rocket.Chat (no-op si faltan) ---
+      - key: ROCKET_CHAT_URL
+        sync: false
+      - key: ROCKET_USER
+        sync: false
+      - key: ROCKET_PASSWORD
+        sync: false
+      - key: ROCKET_WEBHOOK_URL
+        sync: false
+      - key: ROCKET_CHANNEL
+        sync: false
+      - key: ROCKET_BOT_USERNAME
+        sync: false
 
