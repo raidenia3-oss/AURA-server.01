@@ -299,9 +299,7 @@ class RocketChatBridge:
 
     async def _poll_once(self, room_id: str) -> None:
         res = self._get(
-            "/api/v1/channels.history"
-            if False
-            else "/api/v1/channels.history",
+            "/api/v1/channels.history",
             params={"roomId": room_id, "count": 20},
         )
         if not res:
@@ -329,17 +327,28 @@ class RocketChatBridge:
             await self._handle(prompt, user)
 
     def _strip_prefix(self, text: str) -> str:
-        t = text
-        for tok in (f"@{self.bot_username}", CMD_PREFIX, "!"):
-            if t.lower().startswith(tok.lower()):
-                t = t[len(tok):].strip()
-                break
+        """Quita la mención al bot y el prefijo de comando, conservando
+        disparadores especiales como '!libre' para que _handle los detecte."""
+        t = text.strip()
+        # 1) Mención explícita al bot (ej. "@aura.bot").
+        mention = f"@{self.bot_username.lower()}"
+        if t.lower().startswith(mention):
+            t = t[len(mention):].strip()
+        # 2) Prefijo de comando (!aura), salvo que sea un disparador libre.
+        if t.lower().startswith(CMD_PREFIX.lower()) and not t.lower().startswith(
+            FREE_TRIGGER.lower()
+        ):
+            t = t[len(CMD_PREFIX):].strip()
         return t
 
     async def _handle(self, prompt: str, user: str) -> None:
-        free_mode = prompt.startswith(FREE_TRIGGER)
+        free_mode = prompt.lower().startswith(FREE_TRIGGER.lower())
         if free_mode:
-            prompt = prompt[len(FREE_TRIGGER):].strip()
+            # Quitar el disparador '!libre' (insensible a mayúsculas).
+            for trig in (FREE_TRIGGER, FREE_TRIGGER.lower()):
+                if prompt.lower().startswith(trig.lower()):
+                    prompt = prompt[len(trig):].strip()
+                    break
         try:
             if free_mode:
                 res = self.router.chat(prompt=prompt, free_mode=True)
