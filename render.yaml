@@ -31,6 +31,19 @@ services:
         sync: false
       - key: OPENROUTER_API_KEY
         sync: false
+      # --- Modo Libre: proveedores sin restricciones (API key secundaria) ---
+      - key: OPENROUTER_FREE_KEY
+        sync: false
+      - key: DEEPINFRA_API_KEY
+        sync: false
+      - key: DEEPINFRA_FREE_KEY
+        sync: false
+      - key: DEEPINFRA_BASE_URL
+        sync: false
+      - key: OPENROUTER_FREE_MODEL
+        sync: false
+      - key: DEEPINFRA_FREE_MODEL
+        sync: false
       # --- Opcionales (tienen defaults sensatos en el código) ---
       - key: DATABASE_URL
         sync: false

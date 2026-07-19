@@ -35,11 +35,14 @@ from ame_backend.src.neural_core import SemanticMemory
 from ame_backend.src import keep_alive as keep_alive_mod
 from ame_backend.src.tools import browser
 from ame_backend.src.tools import workspace as workspace_tools
+from ame_backend.src.tools.multi_model_router import MultiModelRouter
+from ame_backend.src.tools import orchestrator as orchestrator_mod
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AURA Backend")
 ai = AIEngine()
+router_engine = MultiModelRouter(ai)
 task_mgr = TaskManager()
 db = Database()
 
@@ -199,6 +202,22 @@ def chat(payload: dict) -> dict:
     text = result.get("text", "")
     provider = result.get("provider")
     intent = result.get("intent")
+
+    # Modo Libre: si el usuario lo activa, enrutar por el multi-model router
+    # hacia modelos sin restricciones (OpenRouter/DeepInfra) con API key secundaria.
+    if payload.get("free_mode"):
+        try:
+            free_res = router_engine.chat(
+                prompt=prompt,
+                context=enriched_context or None,
+                free_mode=True,
+                prefer=payload.get("free_prefer"),
+            )
+            if free_res.get("text"):
+                text = free_res["text"]
+                provider = free_res.get("provider", provider)
+        except Exception as exc:
+            logger.error("Modo Libre falló: %s", exc)
 
     # Módulo Operador de Workspace: si el usuario pide operar archivos locales,
     # Gemini decide (tool calling nativo) cuándo leer/escribir en el sandbox.
@@ -413,6 +432,71 @@ def workspace_endpoint(payload: dict) -> dict:
             logger.error("No se guardó lectura [WORKSPACE]: %s", exc)
 
     return result
+
+
+# ------------------------------------------------------------------ #
+# Enrutador Multi-Modelo ("Modo Libre") + Orquestador Autónomo
+# ------------------------------------------------------------------ #
+@app.post("/api/router")
+def router_endpoint(payload: dict) -> dict:
+    """Enrutador multi-modelo. Activa el "Modo Libre" con modelos sin censura.
+
+    {action:"chat", prompt, free_mode?:bool, prefer?:"openrouter"|"deepinfra"}
+    {action:"status"}  -> proveedores y disponibilidad de Modo Libre
+    """
+    action = (payload or {}).get("action", "status")
+    if action == "status":
+        return {
+            "free_mode_available": router_engine.free_mode_available(),
+            "providers": router_engine.list_providers(),
+        }
+    if action == "chat":
+        prompt = payload.get("prompt", "")
+        if not prompt:
+            return {"ok": False, "error": "prompt_vacio"}
+        free_mode = bool(payload.get("free_mode", False))
+        prefer = payload.get("prefer")
+        res = router_engine.chat(prompt=prompt, free_mode=free_mode, prefer=prefer)
+        return res
+    return {"ok": False, "error": "accion_no_soportada", "action": action}
+
+
+@app.post("/api/orchestrator")
+def orchestrator_endpoint(payload: dict) -> dict:
+    """Orquestador Autónomo del Enjambre.
+
+    Acciones:
+      - analyze:  analiza rendimiento de la neurona y sugiere optimizaciones
+      - scout:    recopila plataformas cloud alternativas (Server Scout)
+      - deploy:   genera Dockerfile + docker-compose para un nuevo nodo
+      - apply:    aplica una optimización propuesta (requiere aprobación)
+    """
+    action = (payload or {}).get("action", "analyze")
+    try:
+        if action == "analyze":
+            neural_status = None
+            try:
+                neural_status = core.status()
+            except Exception:
+                pass
+            return orchestrator_mod.analyze_performance(ai, neural_status)
+        if action == "scout":
+            return orchestrator_mod.scout_infrastructure()
+        if action == "deploy":
+            return orchestrator_mod.generate_deployment_config(
+                target=payload.get("target", "generic"),
+                port=int(payload.get("port", 8000)),
+            )
+        if action == "apply":
+            return orchestrator_mod.apply_optimization(
+                payload.get("path", ""),
+                payload.get("original", ""),
+                payload.get("optimized", ""),
+            )
+        return {"ok": False, "error": "accion_no_soportada", "action": action}
+    except Exception as exc:
+        logger.error("Fallo de orchestrator (%s): %s", action, exc)
+        return {"ok": False, "error": "orchestrator_error", "detail": str(exc)}
 
 
 @app.get("/neural/status")

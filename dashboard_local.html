@@ -170,6 +170,32 @@
     </div>
   </div>
 
+  <!-- ENJAMBRE AUTÓNOMO: ORQUESTADOR + ENRUTADOR LIBRE -->
+  <div class="card vision-card">
+    <h2>🐝 Enjambre Autónomo</h2>
+    <p class="sub" style="margin-bottom:1rem">Orquestador + Enrutador Multi-Modelo (Modo Libre)</p>
+
+    <label for="orchPrompt">Instrucción para AURA</label>
+    <div class="input-row">
+      <input type="text" id="orchPrompt" placeholder="Analiza el rendimiento de la neurona y sugiere optimizaciones">
+      <button id="orchAnalyzeBtn" class="secondary">🧠 Analizar</button>
+    </div>
+
+    <div class="btn-group">
+      <button class="secondary" id="orchScoutBtn">🛰️ Server Scout</button>
+      <button class="secondary" id="orchDeployBtn">📦 Generar Docker</button>
+      <button class="secondary" id="routerStatusBtn">🔀 Estado Enrutador</button>
+    </div>
+
+    <label for="freePrompt" style="margin-top:1rem">Modo Libre (modelos sin censura)</label>
+    <div class="input-row">
+      <input type="text" id="freePrompt" placeholder="Habla en Modo Libre...">
+      <button id="freeBtn">🔓 Libre</button>
+    </div>
+
+    <div class="result-box pending" id="orchResult">Usa Analizar, Server Scout o el Modo Libre.</div>
+  </div>
+
   <footer>
     AURA v4.0 · Modo local Wi-Fi · 
     <a href="#" id="openDocs">README.md</a>
@@ -463,6 +489,79 @@
       ws.forEach((m,i) => { out += `#${i+1} ${String(m.content||'').slice(0,300)}\n\n`; });
       showResult(wsResult, out);
     } catch(e){ showResult(wsResult, `No se pudo leer la memoria: ${e.message}`, true); }
+  });
+
+  // --- ENJAMBRE AUTÓNOMO: ORQUESTADOR + ENRUTADOR ---
+  const orchPrompt = document.getElementById('orchPrompt');
+  const orchResult = document.getElementById('orchResult');
+  const orchAnalyzeBtn = document.getElementById('orchAnalyzeBtn');
+  const orchScoutBtn = document.getElementById('orchScoutBtn');
+  const orchDeployBtn = document.getElementById('orchDeployBtn');
+  const routerStatusBtn = document.getElementById('routerStatusBtn');
+  const freePrompt = document.getElementById('freePrompt');
+  const freeBtn = document.getElementById('freeBtn');
+
+  async function orchCall(body){
+    const base = BASE_URL || getBaseUrl();
+    return fetchFrom(`${base}/api/orchestrator`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+  }
+
+  orchAnalyzeBtn.addEventListener('click', async () => {
+    orchResult.className='result-box pending'; orchResult.textContent='🧠 Analizando neurona...';
+    try {
+      const data = await orchCall({action:'analyze'});
+      if(!data.ok){ throw new Error(data.error||'fallo'); }
+      showResult(orchResult, `🧠 Análisis (${data.provider}):\n\n${data.analysis||'(sin sugerencias)'}`);
+    } catch(e){ showResult(orchResult, `Error: ${e.message}`, true); }
+  });
+
+  orchScoutBtn.addEventListener('click', async () => {
+    orchResult.className='result-box pending'; orchResult.textContent='🛰️ Escaneando infraestructura...';
+    try {
+      const data = await orchCall({action:'scout'});
+      if(!data.ok){ throw new Error(data.error||'fallo'); }
+      let out = '🛰️ Plataformas detectadas:\n\n';
+      (data.platforms||[]).forEach(p => { out += `• ${p.url}\n  ${String(p.snippet||p.error||'').slice(0,120)}\n`; });
+      showResult(orchResult, out);
+    } catch(e){ showResult(orchResult, `Error: ${e.message}`, true); }
+  });
+
+  orchDeployBtn.addEventListener('click', async () => {
+    orchResult.className='result-box pending'; orchResult.textContent='📦 Generando Dockerfile...';
+    try {
+      const data = await orchCall({action:'deploy', target:'swarm-node'});
+      if(!data.ok){ throw new Error(data.error||'fallo'); }
+      showResult(orchResult, `📦 Dockerfile (${data.target}):\n\n${data.dockerfile}\n\n--- docker-compose ---\n${data.docker_compose}`);
+    } catch(e){ showResult(orchResult, `Error: ${e.message}`, true); }
+  });
+
+  routerStatusBtn.addEventListener('click', async () => {
+    orchResult.className='result-box pending'; orchResult.textContent='🔀 Consultando enrutador...';
+    try {
+      const data = await fetchFrom(`${BASE_URL||getBaseUrl()}/api/router`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({action:'status'})
+      });
+      let out = `🔀 Modo Libre disponible: ${data.free_mode_available}\n\nProveedores:\n`;
+      (data.providers||[]).forEach(p => { out += `• ${p.provider} :: ${p.model} (${p.configured?'✓':'✗'})\n`; });
+      showResult(orchResult, out);
+    } catch(e){ showResult(orchResult, `Error: ${e.message}`, true); }
+  });
+
+  freeBtn.addEventListener('click', async () => {
+    const p = freePrompt.value.trim();
+    if(!p){ showResult(orchResult, 'Escribe algo para el Modo Libre.', true); return; }
+    orchResult.className='result-box pending'; orchResult.textContent='🔓 Modo Libre...';
+    try {
+      const data = await fetchFrom(`${BASE_URL||getBaseUrl()}/api/router`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({action:'chat', prompt:p, free_mode:true})
+      });
+      showResult(orchResult, `🔓 (${data.provider||'free'}):\n\n${data.text||data.error||'(sin respuesta)'}`);
+    } catch(e){ showResult(orchResult, `Error: ${e.message}`, true); }
   });
 
   // Auto-conectar al cargar: usa el host actual (nube) o la IP guardada (local)
