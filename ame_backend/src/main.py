@@ -39,6 +39,7 @@ from ame_backend.src.tools.multi_model_router import MultiModelRouter
 from ame_backend.src.tools import orchestrator as orchestrator_mod
 from ame_backend.src import neural_telemetry
 from ame_backend.src.tools import discord_bot as discord_bridge_mod
+from ame_backend.src.tools import knowledge_ingest as knowledge_ingest_mod
 
 logger = logging.getLogger(__name__)
 
@@ -183,7 +184,17 @@ def chat(payload: dict) -> dict:
     # Construir contexto enriquecido: RAG + web.
     rag_context = ""
     try:
-        hits = memory.recall(prompt or web_context, top_k=3)
+        # Consulta técnica -> priorizar memoria [KNOWLEDGE].
+        _technical = bool(
+            re.search(
+                r"\b(api|fastapi|react|endpoint|router|function|class|code|"
+                r"documentacion|docstring|decorator|http|request|response|"
+                r"embedding|modelo|llm|python|typescript|sql)\b",
+                prompt or "",
+                re.IGNORECASE,
+            )
+        )
+        hits = memory.recall(prompt or web_context, top_k=3, technical=_technical)
         neural_telemetry.record_rag(prompt, len(hits))
         rag_context = memory.build_context(prompt or web_context, top_k=3)
     except Exception as exc:
@@ -527,6 +538,52 @@ def orchestrator_endpoint(payload: dict) -> dict:
         return {"ok": False, "error": "orchestrator_error", "detail": str(exc)}
 
 
+# ------------------------------------------------------------------ #
+# Replicación y Redundancia Multi-Nodo (Supervivencia 100% Uptime)
+# ------------------------------------------------------------------ #
+_SWARM_TOKEN = os.getenv("SWARM_TOKEN", "aura-swarm-secret")
+
+
+def _swarm_auth(provided: Optional[str]) -> bool:
+    if not _SWARM_TOKEN:
+        return False
+    return provided == _SWARM_TOKEN
+
+
+@app.post("/api/enjambre/sincronizar")
+def enjambre_sincronizar(payload: dict) -> dict:
+    """Nodo secundario (Koyeb/Fly) solicita una copia ligera del estado.
+
+    Protegido por ``SWARM_TOKEN`` (header ``X-Swarm-Token`` o campo ``token``).
+    Devuelve historial de chat, memorias semánticas y pesos de la neurona.
+    """
+    provided = (payload or {}).get("token") or (payload or {}).get("X-Swarm-Token")
+    if not _swarm_auth(provided):
+        return {"ok": False, "error": "unauthorized"}
+    try:
+        chat_limit = int((payload or {}).get("chat_limit", 20))
+        memory_limit = int((payload or {}).get("memory_limit", 50))
+    except Exception:
+        chat_limit, memory_limit = 20, 50
+    return orchestrator_mod.package_swarm_state(
+        chat_limit=chat_limit, memory_limit=memory_limit
+    )
+
+
+@app.post("/api/knowledge/ingest")
+def knowledge_ingest_endpoint(payload: dict) -> dict:
+    """Ingesta conocimiento senior (texto/código/URL) al cerebro RAG.
+
+    Acepta {text|code|url, source?}. Divide en chunks, genera embeddings
+    con GeminiEmbedder y los guarda en semantic_memory con tag [KNOWLEDGE].
+    """
+    try:
+        return knowledge_ingest_mod.ingest(payload or {})
+    except Exception as exc:
+        logger.error("Fallo de knowledge ingest: %s", exc)
+        return {"ok": False, "error": "knowledge_ingest_error", "detail": str(exc)}
+
+
 @app.get("/neural/status")
 def neural_status() -> dict:
     """Estado del Núcleo Evolutivo (neurona + Sys Vitals en vivo)."""
@@ -764,18 +821,23 @@ async def mesh_stream(ws: WebSocket) -> None:
         mesh_clients.discard(ws)
 
 
-async def broadcast_mesh_alert(message: str) -> None:
-    """Difunde una alerta de la Neurona a todos los nodos de la Mesh."""
+async def broadcast_mesh(payload: dict) -> None:
+    """Difunde un payload JSON a todos los nodos conectados de la Mesh."""
     if not mesh_clients:
         return
-    payload = json.dumps({"type": "alert", "text": message})
+    raw = json.dumps(payload)
     dead = set()
     for client in list(mesh_clients):
         try:
-            await client.send_text(payload)
+            await client.send_text(raw)
         except Exception:
             dead.add(client)
     mesh_clients.difference_update(dead)
+
+
+async def broadcast_mesh_alert(message: str) -> None:
+    """Difunde una alerta de la Neurona a todos los nodos de la Mesh."""
+    await broadcast_mesh({"type": "alert", "text": message})
 
 
 # ------------------------------------------------------------------ #
@@ -816,10 +878,15 @@ async def _neural_monitor_loop() -> None:
             tick = core.tick(vitals, alive=True)
             inst = tick.get("instability")
             ka = tick.get("keep_alive_fired", 0)
+            stability = tick.get("stability", 1.0)
+            # Difundir estabilidad neural a la Cabina Táctica Móvil (Mesh).
+            await broadcast_mesh(
+                {"type": "neural", "stability": round(stability, 4), "instability": bool(inst)}
+            )
             now = asyncio.get_event_loop().time()
             if inst and (now - last_alert) > 30.0:
                 msg = (
-                    f"Neurona inestable (estabilidad={tick.get('stability'):.3f}, "
+                    f"Neurona inestable (estabilidad={stability:.3f}, "
                     f"keep_alive={ka}). AURA manteniendo el sistema en línea."
                 )
                 discord_bridge.alert(msg)

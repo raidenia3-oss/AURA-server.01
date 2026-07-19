@@ -388,8 +388,15 @@ class SemanticMemory:
             print(f"[SemanticMemory] no se guardó: {exc}")
             return None
 
-    def recall(self, query: str, top_k: int = 3, min_sim: float = 0.25) -> List[dict]:
-        """Busca los ``top_k`` recuerdos más similares a ``query``."""
+    def recall(
+        self, query: str, top_k: int = 3, min_sim: float = 0.25, technical: bool = False
+    ) -> List[dict]:
+        """Busca los ``top_k`` recuerdos más similares a ``query``.
+
+        Si ``technical`` es True (consulta técnica detectada), prioriza los
+        recuerdos de tipo ``[KNOWLEDGE]`` para enriquecer el contexto con la
+        documentación ingerida.
+        """
         q_vec = self.embedder.embed(query)
         if q_vec is None:
             # Sin embeddings: devolvemos los más recientes como fallback.
@@ -402,6 +409,11 @@ class SemanticMemory:
             sim = cosine_similarity(q_vec, r["vector"])
             if sim >= min_sim:
                 scored.append((sim, r))
+        # Prioridad técnica: los [KNOWLEDGE] reciben un boost de similitud.
+        if technical:
+            for i, (sim, r) in enumerate(scored):
+                if "[KNOWLEDGE]" in str(r.get("kind", "")):
+                    scored[i] = (min(1.0, sim + 0.15), r)
         scored.sort(key=lambda x: x[0], reverse=True)
         return [
             {

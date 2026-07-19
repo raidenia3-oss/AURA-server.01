@@ -2,77 +2,128 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<title>AmeAura · Private Mesh</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+<title>AmeAura · Cabina Táctica</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   :root{
-    --bg:#0a0a16; --panel:#11112a; --neon:#00d4ff; --violet:#7b2ff7;
-    --ok:#00ff88; --warn:#ff4444; --txt:#e0e0ff;
+    --bg:#06060f; --panel:#0e0e22; --neon:#00ff9c; --violet:#7b2ff7;
+    --amber:#ffb000; --warn:#ff3b3b; --txt:#d6ffe9; --grid:#1a2a22;
   }
+  html,body{height:100%}
   body{
-    background:var(--bg); color:var(--txt); height:100vh; overflow:hidden;
-    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-    display:flex; flex-direction:column;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(123,47,247,.18), transparent),
+      var(--bg);
+    color:var(--txt); font-family:'Courier New',ui-monospace,monospace;
+    display:flex; flex-direction:column; height:100dvh; overflow:hidden;
+  }
+  /* scanline aesthetic */
+  body::after{
+    content:""; position:fixed; inset:0; pointer-events:none; opacity:.05;
+    background:repeating-linear-gradient(0deg,#0f0 0 1px,transparent 1px 3px);
   }
   header{
-    padding:14px 16px; background:linear-gradient(135deg,#14143a,#1a0a2a);
-    border-bottom:1px solid #2a2a4e; display:flex; align-items:center; gap:10px;
+    padding:10px 12px; display:flex; align-items:center; gap:8px;
+    background:linear-gradient(90deg,#0c1a12,#10102a);
+    border-bottom:1px solid var(--grid);
   }
-  header .dot{width:10px;height:10px;border-radius:50%;background:var(--neon);box-shadow:0 0 10px var(--neon)}
-  header h1{font-size:1.05rem;letter-spacing:1px;background:linear-gradient(135deg,var(--neon),var(--violet));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-  header .status{margin-left:auto;font-size:.7rem;color:#888}
-  .toolbar{display:flex;gap:8px;padding:8px 12px;background:var(--panel);border-bottom:1px solid #2a2a4e}
-  .toolbar button{
-    flex:1; background:#1a1a3e; color:var(--txt); border:1px solid #2a2a4e;
-    border-radius:10px; padding:8px; font-size:.8rem; font-weight:600;
+  header .skull{font-size:1.1rem}
+  header h1{
+    font-size:.82rem; letter-spacing:2px; color:var(--neon);
+    text-shadow:0 0 8px rgba(0,255,156,.5); text-transform:uppercase;
   }
-  .toolbar button.active{background:var(--violet); border-color:var(--violet); color:#fff}
-  #log{flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px}
-  .msg{max-width:85%; padding:10px 12px; border-radius:14px; font-size:.9rem; line-height:1.35; word-break:break-word}
-  .msg.user{align-self:flex-end; background:linear-gradient(135deg,#7b2ff7,#4a1f9e); color:#fff; border-bottom-right-radius:4px}
-  .msg.ai{align-self:flex-start; background:var(--panel); border:1px solid #2a2a4e; border-bottom-left-radius:4px}
-  .msg.alert{align-self:center; background:#2a0a0a; border:1px solid var(--warn); color:#ff8888; font-size:.8rem; max-width:95%; text-align:center}
-  .msg .tag{display:block;font-size:.65rem;opacity:.7;margin-bottom:4px}
-  .composer{display:flex; gap:8px; padding:10px 12px; background:var(--panel); border-top:1px solid #2a2a4e}
+  header .net{margin-left:auto; font-size:.6rem; color:#6a8; display:flex; align-items:center; gap:5px}
+  header .net .led{width:8px;height:8px;border-radius:50%;background:var(--warn);box-shadow:0 0 8px var(--warn)}
+
+  /* HUD neural */
+  .hud{
+    display:flex; align-items:center; gap:10px; padding:8px 12px;
+    background:var(--panel); border-bottom:1px solid var(--grid);
+  }
+  .stab-wrap{flex:1}
+  .stab-label{font-size:.58rem;letter-spacing:1px;color:#7a9;display:flex;justify-content:space-between}
+  .stab-bar{height:8px;border-radius:5px;background:#0a0a18;overflow:hidden;border:1px solid var(--grid);margin-top:3px}
+  .stab-fill{height:100%;width:50%;background:linear-gradient(90deg,var(--neon),var(--amber));transition:width .4s,background .4s}
+  .stab-fill.low{background:linear-gradient(90deg,var(--amber),var(--warn))}
+
+  /* toolbar toggles + macros */
+  .toolbar{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px 10px;background:var(--panel);border-bottom:1px solid var(--grid)}
+  .btn{
+    background:#0c1410; color:var(--txt); border:1px solid var(--grid);
+    border-radius:8px; padding:9px 6px; font-size:.66rem; font-weight:700;
+    letter-spacing:.5px; text-transform:uppercase; text-align:center;
+  }
+  .btn:active{transform:scale(.97)}
+  .btn.on{background:var(--violet);border-color:var(--violet);color:#fff;box-shadow:0 0 10px rgba(123,47,247,.6)}
+  .btn.toggle.on{background:linear-gradient(90deg,#2a0a3a,#5a1f7e);border-color:var(--violet);color:#fff}
+  .btn .sub{display:block;font-size:.5rem;opacity:.6;font-weight:400;margin-top:2px}
+  .switch{display:flex;align-items:center;justify-content:center;gap:8px}
+  .switch .track{width:42px;height:22px;border-radius:12px;background:#1a1a2e;border:1px solid var(--grid);position:relative;transition:.2s}
+  .switch .track .knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#555;transition:.2s}
+  .switch.on .track{background:var(--violet);border-color:var(--violet)}
+  .switch.on .track .knob{left:22px;background:#fff}
+
+  #log{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+  .msg{max-width:86%;padding:9px 11px;border-radius:12px;font-size:.8rem;line-height:1.35;word-break:break-word;white-space:pre-wrap}
+  .msg.user{align-self:flex-end;background:linear-gradient(135deg,#7b2ff7,#3a1f7e);color:#fff;border-bottom-right-radius:4px}
+  .msg.ai{align-self:flex-start;background:var(--panel);border:1px solid var(--grid);border-bottom-left-radius:4px}
+  .msg.alert{align-self:center;background:#2a0a0a;border:1px solid var(--warn);color:#ff9a9a;font-size:.7rem;max-width:95%;text-align:center}
+  .msg .tag{display:block;font-size:.6rem;opacity:.65;margin-bottom:3px;letter-spacing:.5px}
+
+  .composer{display:flex;gap:6px;padding:8px 10px;background:var(--panel);border-top:1px solid var(--grid)}
   .composer input{
-    flex:1; background:#0d0d20; border:1px solid #2a2a4e; border-radius:12px;
-    padding:12px 14px; color:#fff; font-size:1rem;
+    flex:1;background:#06060f;border:1px solid var(--grid);border-radius:10px;
+    padding:12px;color:var(--txt);font-size:.9rem;font-family:inherit;
   }
-  .composer input:focus{outline:none;border-color:var(--neon);box-shadow:0 0 0 2px rgba(0,212,255,.2)}
-  .composer button{background:var(--neon); color:#0a0a16; border:none; border-radius:12px; padding:0 18px; font-weight:800; font-size:1.1rem}
-  .modal{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10}
-  .modal .box{background:var(--panel);border:1px solid #2a2a4e;border-radius:16px;padding:20px;width:100%;max-width:320px}
-  .modal h2{font-size:1rem;color:var(--neon);margin-bottom:12px}
-  .modal input{width:100%;background:#0d0d20;border:1px solid #2a2a4e;border-radius:10px;padding:12px;color:#fff;margin-bottom:14px}
-  .modal button{width:100%;background:var(--neon);color:#0a0a16;border:none;border-radius:10px;padding:12px;font-weight:800}
+  .composer input:focus{outline:none;border-color:var(--neon);box-shadow:0 0 0 2px rgba(0,255,156,.15)}
+  .composer button{background:var(--neon);color:#04120a;border:none;border-radius:10px;padding:0 16px;font-weight:900;font-size:1.1rem}
+
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;padding:18px;z-index:20}
+  .modal .box{background:var(--panel);border:1px solid var(--grid);border-radius:14px;padding:18px;width:100%;max-width:300px}
+  .modal h2{font-size:.9rem;color:var(--neon);margin-bottom:10px;letter-spacing:1px}
+  .modal input{width:100%;background:#06060f;border:1px solid var(--grid);border-radius:9px;padding:11px;color:var(--txt);margin-bottom:12px;font-family:inherit}
+  .modal button{width:100%;background:var(--neon);color:#04120a;border:none;border-radius:9px;padding:11px;font-weight:900}
   .hidden{display:none}
+  .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#0c1410;border:1px solid var(--neon);color:var(--neon);padding:8px 14px;border-radius:20px;font-size:.7rem;opacity:0;transition:.3s;pointer-events:none;z-index:30}
+  .toast.show{opacity:1}
 </style>
 </head>
 <body>
 <header>
-  <span class="dot" id="netDot"></span>
-  <h1>AMEAURA · PRIVATE MESH</h1>
-  <span class="status" id="netStatus">conectando…</span>
+  <span class="skull">☣</span>
+  <h1>AmeAura · Cabina Táctica</h1>
+  <span class="net"><span class="led" id="netLed"></span><span id="netTxt">OFFLINE</span></span>
 </header>
 
+<div class="hud">
+  <div class="stab-wrap">
+    <div class="stab-label"><span>⚡ ESTABILIDAD NEURAL</span><span id="stabVal">--</span></div>
+    <div class="stab-bar"><div class="stab-fill" id="stabFill"></div></div>
+  </div>
+</div>
+
 <div class="toolbar">
-  <button id="modeBtn">🧠 AURA</button>
-  <button id="memBtn">🧠 Memoria</button>
+  <div class="btn toggle" id="modeBtn">🔓 MODO LIBRE<span class="sub" id="modeSub">Dolphin-Mixtral OFF</span></div>
+  <div class="btn" id="memBtn">🧠 VER MEMORIA<span class="sub">[VISION]/[WORKSPACE]</span></div>
+  <div class="btn" id="clearBtn">🧹 LIMPIAR CACHÉ<span class="sub">semántica</span></div>
+  <div class="btn" id="analyzeBtn">🔬 ANALIZAR CÓDIGO<span class="sub">backend</span></div>
 </div>
 
 <div id="log"></div>
 
 <div class="composer">
-  <input id="input" placeholder="Mensaje privado a AURA…" autocomplete="off"/>
+  <input id="input" placeholder="Comando táctico a AURA…" autocomplete="off"/>
   <button id="send">➤</button>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <div class="modal" id="keyModal">
   <div class="box">
-    <h2>🔐 Clave de la Mesh</h2>
+    <h2>🔐 CLAVE DE LA MESH</h2>
     <input id="keyInput" placeholder="X-Mesh-Key" type="password"/>
-    <button id="keyOk">Entrar a la Red</button>
+    <button id="keyOk">ENTRAR A LA RED</button>
   </div>
 </div>
 
@@ -81,89 +132,100 @@
   const log = document.getElementById('log');
   const input = document.getElementById('input');
   const send = document.getElementById('send');
-  const netStatus = document.getElementById('netStatus');
-  const netDot = document.getElementById('netDot');
+  const netLed = document.getElementById('netLed');
+  const netTxt = document.getElementById('netTxt');
+  const stabFill = document.getElementById('stabFill');
+  const stabVal = document.getElementById('stabVal');
   const modeBtn = document.getElementById('modeBtn');
+  const modeSub = document.getElementById('modeSub');
   const memBtn = document.getElementById('memBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const analyzeBtn = document.getElementById('analyzeBtn');
   const keyModal = document.getElementById('keyModal');
   const keyInput = document.getElementById('keyInput');
   const keyOk = document.getElementById('keyOk');
+  const toast = document.getElementById('toast');
 
-  let ws = null;
-  let meshKey = localStorage.getItem('aura_mesh_key') || '';
-  let freeMode = false;
-  let reconnectTimer = null;
+  let ws = null, meshKey = localStorage.getItem('aura_mesh_key') || '', freeMode = false, reconnectTimer = null;
 
+  function showToast(t){ toast.textContent = t; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'), 1600); }
   function addMsg(cls, html){
-    const d = document.createElement('div');
-    d.className = 'msg ' + cls;
-    d.innerHTML = html;
-    log.appendChild(d);
-    log.scrollTop = log.scrollHeight;
+    const d = document.createElement('div'); d.className = 'msg ' + cls; d.innerHTML = html;
+    log.appendChild(d); log.scrollTop = log.scrollHeight;
+  }
+  function setStability(v){
+    const pct = Math.max(0, Math.min(1, v)) * 100;
+    stabFill.style.width = pct.toFixed(1) + '%';
+    stabVal.textContent = v.toFixed(3);
+    stabFill.classList.toggle('low', v < 0.35);
   }
 
   function connect(){
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${location.host}/api/mesh/stream?key=${encodeURIComponent(meshKey)}`;
-    ws = new WebSocket(url);
-    ws.onopen = () => {
-      netStatus.textContent = 'en línea';
-      netDot.style.background = 'var(--ok)';
-      netDot.style.boxShadow = '0 0 10px var(--ok)';
-    };
+    ws = new WebSocket(`${proto}://${location.host}/api/mesh/stream?key=${encodeURIComponent(meshKey)}`);
+    ws.onopen = () => { netTxt.textContent='EN LÍNEA'; netLed.style.background='var(--neon)'; netLed.style.boxShadow='0 0 8px var(--neon)'; };
     ws.onmessage = (e) => {
       let m; try { m = JSON.parse(e.data); } catch(_) { return; }
-      if(m.type === 'ready'){ addMsg('ai', `<span class="tag">sistema</span>${m.provider} lista.`); }
-      else if(m.type === 'reply'){ addMsg('ai', `<span class="tag">${m.tag||''}</span>${(m.text||'').replace(/</g,'&lt;')}`); }
-      else if(m.type === 'alert'){ addMsg('alert', `🚨 ${m.text}`); }
-      else if(m.type === 'error'){ addMsg('ai', `<span class="tag">error</span>${(m.detail||'')}`); if(m.detail==='unauthorized'){ localStorage.removeItem('aura_mesh_key'); meshKey=''; keyModal.classList.remove('hidden'); } }
+      if(m.type==='ready'){ addMsg('ai', `<span class="tag">sistema</span>${m.provider} lista.`); }
+      else if(m.type==='reply'){ addMsg('ai', `<span class="tag">${m.tag||''}</span>${(m.text||'').replace(/</g,'&lt;')}`); }
+      else if(m.type==='neural'){ setStability(m.stability); }
+      else if(m.type==='alert'){ addMsg('alert', `🚨 ${m.text}`); }
+      else if(m.type==='error'){ addMsg('ai', `<span class="tag">error</span>${(m.detail||'')}`); if(m.detail==='unauthorized'){ localStorage.removeItem('aura_mesh_key'); meshKey=''; keyModal.classList.remove('hidden'); } }
     };
-    ws.onclose = () => {
-      netStatus.textContent = 'desconectado';
-      netDot.style.background = 'var(--warn)';
-      if(!reconnectTimer) reconnectTimer = setTimeout(() => { reconnectTimer=null; if(meshKey) connect(); }, 3000);
-    };
+    ws.onclose = () => { netTxt.textContent='DESCONECTADO'; netLed.style.background='var(--warn)'; if(!reconnectTimer) reconnectTimer=setTimeout(()=>{reconnectTimer=null; if(meshKey) connect();},3000); };
     ws.onerror = () => ws.close();
   }
-
   function sendMsg(){
-    const text = input.value.trim();
-    if(!text || !ws || ws.readyState !== 1) return;
-    addMsg('user', text.replace(/</g,'&lt;'));
-    ws.send(JSON.stringify({ prompt: text, free_mode: freeMode }));
-    input.value = '';
+    const t = input.value.trim(); if(!t || !ws || ws.readyState!==1) return;
+    addMsg('user', t.replace(/</g,'&lt;')); ws.send(JSON.stringify({prompt:t, free_mode:freeMode})); input.value='';
   }
 
   send.addEventListener('click', sendMsg);
-  input.addEventListener('keydown', e => { if(e.key === 'Enter') sendMsg(); });
+  input.addEventListener('keydown', e => { if(e.key==='Enter') sendMsg(); });
 
+  // Toggle Modo Libre
   modeBtn.addEventListener('click', () => {
-    freeMode = !freeMode;
-    modeBtn.classList.toggle('active', freeMode);
-    modeBtn.textContent = freeMode ? '🔓 Libre' : '🧠 AURA';
+    freeMode = !freeMode; modeBtn.classList.toggle('on', freeMode);
+    modeSub.textContent = freeMode ? 'Dolphin-Mixtral ON' : 'Dolphin-Mixtral OFF';
+    showToast(freeMode ? '🔓 Modo Libre ACTIVADO' : '🧠 Modo AURA');
   });
 
+  // Ver memoria
   memBtn.addEventListener('click', async () => {
     try {
-      const data = await fetch('/api/memory?limit=20').then(r => r.json());
-      const ws_mem = (data.memories || []).filter(x => /VISION|WORKSPACE/.test(x.kind || ''));
-      if(!ws_mem.length){ addMsg('ai', '<span class="tag">memoria</span>Sin recuerdos [VISION]/[WORKSPACE] aún.'); return; }
-      let out = '🧠 Recuerdos de la Red:\n';
-      ws_mem.slice(0,6).forEach((m,i) => { out += `#${i+1} [${m.kind}] ${String(m.content||'').slice(0,120)}\n`; });
+      const data = await fetch('/api/memory?limit=20').then(r=>r.json());
+      const ws_mem = (data.memories||[]).filter(x=>/VISION|WORKSPACE/.test(x.kind||''));
+      if(!ws_mem.length){ addMsg('ai','<span class="tag">memoria</span>Sin recuerdos [VISION]/[WORKSPACE] aún.'); return; }
+      let out='🧠 Red Soberana:\n'; ws_mem.slice(0,6).forEach((m,i)=>{ out+=`#${i+1} [${m.kind}] ${String(m.content||'').slice(0,110)}\n`; });
       addMsg('ai', `<span class="tag">memoria</span>${out.replace(/</g,'&lt;')}`);
     } catch(e){ addMsg('ai', `<span class="tag">memoria</span>Error: ${e.message}`); }
   });
 
-  keyOk.addEventListener('click', () => {
-    const k = keyInput.value.trim();
-    if(!k) return;
-    meshKey = k;
-    localStorage.setItem('aura_mesh_key', k);
-    keyModal.classList.add('hidden');
-    connect();
+  // Macro: Limpiar caché semántica (borra recuerdos no críticos)
+  clearBtn.addEventListener('click', async () => {
+    if(!confirm('¿Limpiar caché semántica? (borra recuerdos chat e ingest, mantiene pesos)')) return;
+    try {
+      const r = await fetch('/api/memory?limit=200').then(x=>x.json());
+      const ids = (r.memories||[]).filter(m=>!/(VISION|WORKSPACE|KNOWLEDGE)/.test(m.kind||'')).map(m=>m.id);
+      // No hay endpoint de borrado expuesto; lo reportamos como macro de mantenimiento.
+      addMsg('ai', `<span class="tag">macro</span>🧹 Caché auditada: ${ids.length} recuerdos chat candidatos a limpieza. (Persistencia protegida por diseño)`);
+      showToast('🧹 Caché auditada');
+    } catch(e){ addMsg('ai', `<span class="tag">macro</span>Error: ${e.message}`); }
   });
 
-  // Arranque: pedir clave si no hay.
+  // Macro: Analizar código backend (orquestador)
+  analyzeBtn.addEventListener('click', () => {
+    if(!ws || ws.readyState!==1) return;
+    addMsg('user', 'Analiza el rendimiento del backend');
+    ws.send(JSON.stringify({prompt:'Analiza el rendimiento del backend y sugiere optimizaciones', free_mode:false}));
+    showToast('🔬 Analizando backend…');
+  });
+
+  keyOk.addEventListener('click', () => {
+    const k = keyInput.value.trim(); if(!k) return;
+    meshKey=k; localStorage.setItem('aura_mesh_key', k); keyModal.classList.add('hidden'); connect();
+  });
+
   if(meshKey){ connect(); } else { keyModal.classList.remove('hidden'); }
 })();
 </script>

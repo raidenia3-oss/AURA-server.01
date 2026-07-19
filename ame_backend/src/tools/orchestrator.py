@@ -202,6 +202,55 @@ def generate_deployment_config(
     }
 
 
+def package_swarm_state(chat_limit: int = 20, memory_limit: int = 50) -> Dict[str, Any]:
+    """Empaqueta una copia LIGERA del estado del sistema para réplica multi-nodo.
+
+    Incluye: historial de chat reciente, memorias semánticas (sin vectores
+    pesados para mantener el payload pequeño) y los pesos matemáticos de la
+    neurona (NeuralState). Esto permite que un nodo espejo (Koyeb/Fly) recupere
+    el "cerebro" de AURA sin arrastrar toda la base.
+    """
+    try:
+        from ame_backend.src import models as _models
+        from ame_backend.src.neural_core import AuraPerceptron
+    except Exception as exc:  # pragma: no cover
+        return {"ok": False, "error": f"import_fallo: {exc}"}
+    try:
+        messages = _models.recent_messages(limit=chat_limit)
+        memories = _models.recent_memories(limit=memory_limit)
+        # Solo metadatos + contenido (sin el vector completo).
+        memories_lite = [
+            {
+                "id": m.get("id"),
+                "content": m.get("content"),
+                "kind": m.get("kind"),
+                "timestamp": m.get("timestamp"),
+            }
+            for m in memories
+        ]
+        neural = _models.load_neural_state() or {}
+        brain = {
+            "weights": neural.get("weights"),
+            "bias": neural.get("bias"),
+            "learning_rate": neural.get("learning_rate"),
+            "iterations": neural.get("iterations"),
+            "last_stability": neural.get("last_stability"),
+            "n_inputs": AuraPerceptron.N_INPUTS,
+        }
+        return {
+            "ok": True,
+            "chat_history": messages,
+            "semantic_memory": memories_lite,
+            "neural_state": brain,
+            "counts": {
+                "messages": len(messages),
+                "memories": len(memories_lite),
+            },
+        }
+    except Exception as exc:
+        return {"ok": False, "error": f"empaquetado_fallo: {exc}"}
+
+
 _DOCKERFILE_TEMPLATE = """\
 # AURA Swarm Node — Dockerfile optimizado (multi-stage)
 FROM python:{python_version}-slim AS base

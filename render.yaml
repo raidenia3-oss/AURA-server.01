@@ -58,4 +58,11 @@ services:
         sync: false
       - key: MESH_KEY
         sync: false
+      # --- Replicación Multi-Nodo (enjambre) ---
+      - key: SWARM_TOKEN
+        sync: false
+      - key: MIRROR_NODE_URL
+        sync: false
+      - key: RENDER_URL
+        sync: false
 
