@@ -105,11 +105,23 @@ class MultiModelRouter:
                 "provider": "none",
                 "free_mode": True,
             }
-        cfg = (
+        base_cfg = (
             self.extra_providers[provider]
             if provider in self.extra_providers
             else self.engine.providers[provider]
         )
+        # En Modo Libre usamos el modelo SIN RESTRICCIONES del catálogo libre.
+        free_model = self.free_models.get(provider, base_cfg.get("model"))
+        # Resolver la API key secundaria real para este proveedor libre.
+        if provider == "openrouter":
+            api_key = os.getenv("OPENROUTER_FREE_KEY") or base_cfg.get("api_key")
+        elif provider == "deepinfra":
+            api_key = os.getenv("DEEPINFRA_API_KEY") or os.getenv("DEEPINFRA_FREE_KEY") or base_cfg.get("api_key")
+        else:
+            api_key = base_cfg.get("api_key")
+        cfg = dict(base_cfg)
+        cfg["api_key"] = api_key
+        cfg["model"] = free_model
         try:
             return self._call_openai_compat(provider, cfg, prompt, context)
         except Exception as exc:  # pragma: no cover
@@ -121,21 +133,24 @@ class MultiModelRouter:
             }
 
     def _pick_free_provider(self, prefer: Optional[str]) -> Optional[str]:
+        # Resuelve la API key secundaria por proveedor libre.
+        def _has_key(name: str) -> bool:
+            if name == "openrouter":
+                return bool(os.getenv("OPENROUTER_FREE_KEY") or os.getenv("OPENROUTER_API_KEY"))
+            if name == "deepinfra":
+                return bool(os.getenv("DEEPINFRA_API_KEY") or os.getenv("DEEPINFRA_FREE_KEY"))
+            return False
+
         candidates = []
-        if prefer and (
-            prefer in self.extra_providers or prefer in self.engine.providers
-        ):
+        if prefer and (prefer in self.extra_providers or prefer in self.engine.providers):
             candidates.append(prefer)
         # Orden por defecto: openrouter (key secundaria) -> deepinfra.
-        if os.getenv("OPENROUTER_FREE_KEY") or os.getenv("OPENROUTER_API_KEY"):
+        if _has_key("openrouter"):
             candidates.append("openrouter")
-        if os.getenv("DEEPINFRA_API_KEY") or os.getenv("DEEPINFRA_FREE_KEY"):
+        if _has_key("deepinfra"):
             candidates.append("deepinfra")
         for c in candidates:
-            cfg = (
-                self.extra_providers.get(c) or self.engine.providers.get(c)
-            )
-            if cfg and cfg.get("api_key"):
+            if _has_key(c):
                 return c
         return None
 

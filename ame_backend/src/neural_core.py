@@ -26,6 +26,11 @@ try:
 except Exception:  # pragma: no cover - import relativo en pruebas
     import models  # type: ignore
 
+try:
+    from ame_backend.src import neural_telemetry
+except Exception:  # pragma: no cover
+    neural_telemetry = None  # type: ignore
+
 
 def _sigmoid(x: float) -> float:
     """Función de activación logística, estable ante overflow."""
@@ -41,14 +46,28 @@ def _leaky_relu(x: float, alpha: float = 0.01) -> float:
 
 
 class AuraPerceptron:
-    """Perceptrón simple multi-entrada -> una salida (estabilidad 0..1)."""
+    """Perceptrón simple multi-entrada -> una salida (estabilidad 0..1).
+
+    Evolución Neural (Fase Enjambre): de 4 a 8 entradas. Además de las
+    métricas de Sys Vitals, ahora absorbe señales de las nuevas herramientas
+    de AURA para ser más predictiva:
+      - 4 entradas base (latencia, memoria, pings, tasa de mensajes)
+      - rag_hit_rate:        tasa de acierto del RAG semántico (0..1)
+      - router_err_rate:     tasa de error del enrutador multi-modelo (0..1)
+      - workspace_block_rate: intentos de path traversal bloqueados (0..1)
+      - tool_activity:       actividad de operación de AURA (0..1)
+    """
 
     # Entradas esperadas en orden fijo:
     #   0: latency_norm   (latencia normalizada 0..1, 1 = malo)
     #   1: mem_norm       (uso de memoria normalizado 0..1)
-    #   2: health_pings   (pings de salud recientes 0..1)
+    #   2: health_norm    (riesgo por falta de pings 0..1)
     #   3: msg_rate       (tasa de mensajes 0..1)
-    N_INPUTS = 4
+    #   4: rag_hit_rate   (acierto RAG semántico 0..1)
+    #   5: router_err_rate(error del enrutador 0..1)
+    #   6: workspace_block_rate (traversal bloqueado 0..1)
+    #   7: tool_activity  (operación de AURA 0..1)
+    N_INPUTS = 8
 
     # Si la estabilidad predicha cae bajo esto, el sistema se considera
     # en riesgo de inactividad -> debe forzar actividad (keep-alive).
@@ -90,7 +109,7 @@ class AuraPerceptron:
 
     @staticmethod
     def vitals_to_inputs(v: dict) -> List[float]:
-        """Normaliza Sys Vitals a las 4 entradas del perceptrón."""
+        """Normaliza Sys Vitals + telemetría de herramientas a 8 entradas."""
         latency = float(v.get("latency_ms", 0.0))
         # Latencia: <=50ms -> 0 (bueno), >=2000ms -> 1 (malo).
         latency_norm = min(1.0, max(0.0, latency / 2000.0))
@@ -105,7 +124,22 @@ class AuraPerceptron:
         msg_rate = float(v.get("msg_rate", 0.0))
         msg_norm = min(1.0, max(0.0, msg_rate))
 
-        return [latency_norm, mem_norm, health_norm, msg_norm]
+        # Nuevas entradas de las herramientas (0..1).
+        rag_hit_rate = min(1.0, max(0.0, float(v.get("rag_hit_rate", 0.0))))
+        router_err_rate = min(1.0, max(0.0, float(v.get("router_err_rate", 0.0))))
+        workspace_block_rate = min(1.0, max(0.0, float(v.get("workspace_block_rate", 0.0))))
+        tool_activity = min(1.0, max(0.0, float(v.get("tool_activity", 0.0))))
+
+        return [
+            latency_norm,
+            mem_norm,
+            health_norm,
+            msg_norm,
+            rag_hit_rate,
+            router_err_rate,
+            workspace_block_rate,
+            tool_activity,
+        ]
 
     # ------------------------------------------------------------------ #
     # Aprendizaje (backprop de un solo paso / regla delta)
@@ -152,6 +186,13 @@ class AuraPerceptron:
                 score -= 0.2
         if latency >= 1500:
             score -= 0.2
+        # Nuevas señales de herramientas (Fase Enjambre).
+        router_err_rate = float(vitals.get("router_err_rate", 0.0))
+        if router_err_rate >= 0.5:
+            score -= 0.2  # enrutador multi-modelo fallando seguido
+        tool_activity = float(vitals.get("tool_activity", 0.0))
+        if tool_activity > 0:
+            score += 0.1  # sistema operando activamente = más estable
         if not alive:
             score -= 0.3
         return min(1.0, max(0.0, score))
@@ -185,8 +226,14 @@ class AuraPerceptron:
                 learning_rate=state["learning_rate"],
                 iterations=state["iterations"],
             )
-        # Semilla inicial razonable: penalizar latencia/memoria altas.
-        return cls(weights=[0.2, 0.1, -0.5, -0.3], bias=0.0, learning_rate=0.05, iterations=0)
+        # Semilla inicial razonable (8 entradas):
+        # penalizar latencia/memoria/router-err, reforzar pings/rag/tools.
+        return cls(
+            weights=[0.2, 0.1, -0.5, -0.3, 0.1, 0.2, 0.05, -0.2],
+            bias=0.0,
+            learning_rate=0.05,
+            iterations=0,
+        )
 
 
 class EvolutionCore:
@@ -207,6 +254,12 @@ class EvolutionCore:
         self.last_error: Optional[float] = None
 
     def tick(self, vitals: dict, alive: bool = True) -> dict:
+        # Inyectar telemetría de herramientas como nuevas entradas (Fase Enjambre).
+        if neural_telemetry is not None:
+            try:
+                vitals = {**vitals, **neural_telemetry.snapshot()}
+            except Exception:
+                pass
         inputs = self.brain.vitals_to_inputs(vitals)
         stability = self.brain.predict(inputs)
         self.last_stability = stability

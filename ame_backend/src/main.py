@@ -37,6 +37,7 @@ from ame_backend.src.tools import browser
 from ame_backend.src.tools import workspace as workspace_tools
 from ame_backend.src.tools.multi_model_router import MultiModelRouter
 from ame_backend.src.tools import orchestrator as orchestrator_mod
+from ame_backend.src import neural_telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +176,8 @@ def chat(payload: dict) -> dict:
     # Construir contexto enriquecido: RAG + web.
     rag_context = ""
     try:
+        hits = memory.recall(prompt or web_context, top_k=3)
+        neural_telemetry.record_rag(prompt, len(hits))
         rag_context = memory.build_context(prompt or web_context, top_k=3)
     except Exception as exc:
         logger.error("RAG falló: %s", exc)
@@ -213,11 +216,15 @@ def chat(payload: dict) -> dict:
                 free_mode=True,
                 prefer=payload.get("free_prefer"),
             )
+            neural_telemetry.record_router(call=True, error=False)
             if free_res.get("text"):
                 text = free_res["text"]
                 provider = free_res.get("provider", provider)
+            else:
+                neural_telemetry.record_router(call=True, error=True)
         except Exception as exc:
             logger.error("Modo Libre falló: %s", exc)
+            neural_telemetry.record_router(call=True, error=True)
 
     # Módulo Operador de Workspace: si el usuario pide operar archivos locales,
     # Gemini decide (tool calling nativo) cuándo leer/escribir en el sandbox.
@@ -379,6 +386,9 @@ def workspace_endpoint(payload: dict) -> dict:
     if handler is None:
         return {"ok": False, "error": "accion_no_soportada", "action": action}
 
+    # Telemetría de la neurona: cada operación cuenta como actividad de AURA.
+    neural_telemetry.record_workspace(op=True, blocked=False)
+
     try:
         if action == "list":
             result = handler(payload.get("path", ""), payload.get("depth", 1))
@@ -390,8 +400,16 @@ def workspace_endpoint(payload: dict) -> dict:
                 payload.get("content", ""),
                 bool(payload.get("append", False)),
             )
+        # Un bloqueo de sandbox (path traversal / no autorizado) es señal de
+        # seguridad para la neurona.
+        if isinstance(result, dict) and not result.get("ok") and result.get("error") in (
+            "Acceso denegado",
+            "archivo_no_autorizado",
+        ):
+            neural_telemetry.record_workspace(op=False, blocked=True)
     except Exception as exc:
         logger.error("Fallo de workspace (%s): %s", action, exc)
+        neural_telemetry.record_workspace(op=False, blocked=True)
         return {"ok": False, "error": "workspace_error", "detail": str(exc)}
 
     # Persistencia semántica de modificaciones importantes.
@@ -456,7 +474,10 @@ def router_endpoint(payload: dict) -> dict:
             return {"ok": False, "error": "prompt_vacio"}
         free_mode = bool(payload.get("free_mode", False))
         prefer = payload.get("prefer")
+        neural_telemetry.record_router(call=True, error=False)
         res = router_engine.chat(prompt=prompt, free_mode=free_mode, prefer=prefer)
+        if not res.get("text") or res.get("error"):
+            neural_telemetry.record_router(call=True, error=True)
         return res
     return {"ok": False, "error": "accion_no_soportada", "action": action}
 
