@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import signal
 import sys
 from datetime import datetime
@@ -33,6 +34,7 @@ from ame_backend.src.neural_core import EvolutionCore
 from ame_backend.src.neural_core import SemanticMemory
 from ame_backend.src import keep_alive as keep_alive_mod
 from ame_backend.src.tools import browser
+from ame_backend.src.tools import workspace as workspace_tools
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +200,39 @@ def chat(payload: dict) -> dict:
     provider = result.get("provider")
     intent = result.get("intent")
 
+    # Módulo Operador de Workspace: si el usuario pide operar archivos locales,
+    # Gemini decide (tool calling nativo) cuándo leer/escribir en el sandbox.
+    _workspace_trigger = bool(
+        re.search(
+            r"(lee|analiza|revisa|muestra|escribe|crea|modifica|cambia|guarda|"
+            r"edita|genera|lista|explora)\s+(el\s+)?(archivo|script|c[oó]digo|"
+            r"fichero|carpeta|directorio|workspace)",
+            prompt,
+            re.IGNORECASE,
+        )
+    )
+    if _workspace_trigger:
+        try:
+            ws_result = ai.chat_with_tools(prompt=prompt, context=enriched_context or None)
+            ws_text = ws_result.get("text", "")
+            if ws_text:
+                text = ws_text
+                provider = ws_result.get("provider", provider)
+            calls = ws_result.get("tool_calls") or []
+            for call in calls:
+                res = call.get("result", {})
+                if res.get("ok") and call.get("tool") == "write_workspace_file":
+                    try:
+                        memory.remember(
+                            f"[WORKSPACE] {call.get('args', {}).get('path')} modificado "
+                            f"por AURA.",
+                            kind="[WORKSPACE]",
+                        )
+                    except Exception as exc:
+                        logger.error("WS mem: %s", exc)
+        except Exception as exc:
+            logger.error("Tool calling falló, usando chat normal: %s", exc)
+
     # Memoria de estado: guardar la respuesta real del asistente.
     try:
         db_models.save_message(
@@ -296,6 +331,88 @@ async def vision(file: UploadFile = File(...), prompt: str = "Describe esta imag
         logger.error("No se pudo guardar vision en memoria: %s", exc)
 
     return {"analysis": text, "provider": provider}
+
+
+# ------------------------------------------------------------------ #
+# Módulo Operador de Workspace ("manos" locales de AURA)
+# ------------------------------------------------------------------ #
+_WORKSPACE_TOOLS = {
+    "read": workspace_tools.read_workspace_file,
+    "list": workspace_tools.list_workspace_contents,
+    "write": workspace_tools.write_workspace_file,
+}
+
+
+@app.post("/api/workspace")
+def workspace_endpoint(payload: dict) -> dict:
+    """Opera archivos dentro del sandbox local de AURA (Workspace Operator).
+
+    Acciones:
+      - ``list``:  {action:"list", path?:"", depth?:1}
+      - ``read``:  {action:"read", path:"AME/recon.py"}
+      - ``write``: {action:"write", path:"AME/notas.md", content:"...", append?:false}
+
+    Las escrituras/modificaciones importantes generan un resumen automático
+    indexado en ``semantic_memory`` con ``kind='[WORKSPACE]'``.
+    """
+    action = (payload or {}).get("action", "list")
+    handler = _WORKSPACE_TOOLS.get(action)
+    if handler is None:
+        return {"ok": False, "error": "accion_no_soportada", "action": action}
+
+    try:
+        if action == "list":
+            result = handler(payload.get("path", ""), payload.get("depth", 1))
+        elif action == "read":
+            result = handler(payload.get("path", ""))
+        else:  # write
+            result = handler(
+                payload.get("path", ""),
+                payload.get("content", ""),
+                bool(payload.get("append", False)),
+            )
+    except Exception as exc:
+        logger.error("Fallo de workspace (%s): %s", action, exc)
+        return {"ok": False, "error": "workspace_error", "detail": str(exc)}
+
+    # Persistencia semántica de modificaciones importantes.
+    if action == "write" and result.get("ok"):
+        path = result.get("path", "")
+        content = payload.get("content", "")
+        try:
+            summary = (
+                f"[WORKSPACE] Modificación de archivo: {path} "
+                f"({result.get('bytes_written', 0)} bytes, modo {result.get('mode')}). "
+                f"Resumen: {content[:400]}"
+            )
+            memory.remember(summary, kind="[WORKSPACE]")
+            db_models.save_message(
+                role="user",
+                content=f"[WORKSPACE] write {path}",
+                provider="workspace",
+                session_id="workspace",
+            )
+            db_models.save_message(
+                role="assistant",
+                content=summary,
+                provider="workspace",
+                session_id="workspace",
+            )
+        except Exception as exc:
+            logger.error("No se guardó resumen [WORKSPACE]: %s", exc)
+
+    # Lectura también se registra como recuerdo liviano para RAG futuro.
+    if action == "read" and result.get("ok"):
+        try:
+            memory.remember(
+                f"[WORKSPACE] Lectura de {result.get('path')}: "
+                f"{result.get('content', '')[:600]}",
+                kind="[WORKSPACE]",
+            )
+        except Exception as exc:
+            logger.error("No se guardó lectura [WORKSPACE]: %s", exc)
+
+    return result
 
 
 @app.get("/neural/status")

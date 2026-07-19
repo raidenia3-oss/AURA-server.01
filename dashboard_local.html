@@ -149,6 +149,27 @@
     </div>
   </div>
 
+  <!-- MÓDULO OPERADOR DE WORKSPACE -->
+  <div class="card vision-card">
+    <h2>🛠️ Operador de Workspace</h2>
+    <p class="sub" style="margin-bottom:1rem">AURA opera archivos en su sandbox local · <span class="memory-tag">[WORKSPACE]</span></p>
+    <label for="wsPath">Ruta relativa (ej: AME/recon.py)</label>
+    <div class="input-row">
+      <input type="text" id="wsPath" placeholder="AME/recon.py">
+      <button id="wsListBtn" class="secondary">📂 Listar</button>
+      <button id="wsReadBtn" class="secondary">👁️ Leer</button>
+    </div>
+    <label for="wsContent">Contenido a escribir (solo texto plano)</label>
+    <div class="input-row">
+      <input type="text" id="wsContent" placeholder="Texto a guardar...">
+      <button id="wsWriteBtn">💾 Escribir</button>
+    </div>
+    <div class="result-box pending" id="wsResult">Usa Listar/Leer/Escribir dentro del sandbox de AURA.</div>
+    <div class="btn-group">
+      <button class="secondary" id="wsMemoryBtn">🧠 Ver memoria [WORKSPACE]</button>
+    </div>
+  </div>
+
   <footer>
     AURA v4.0 · Modo local Wi-Fi · 
     <a href="#" id="openDocs">README.md</a>
@@ -379,6 +400,70 @@
 
   visionBtn.addEventListener('click', runVision);
   visionMemoryBtn.addEventListener('click', showVisionMemory);
+
+  // --- MÓDULO OPERADOR DE WORKSPACE ---
+  const wsPath = document.getElementById('wsPath');
+  const wsContent = document.getElementById('wsContent');
+  const wsResult = document.getElementById('wsResult');
+  const wsListBtn = document.getElementById('wsListBtn');
+  const wsReadBtn = document.getElementById('wsReadBtn');
+  const wsWriteBtn = document.getElementById('wsWriteBtn');
+  const wsMemoryBtn = document.getElementById('wsMemoryBtn');
+
+  async function wsCall(body){
+    const base = BASE_URL || getBaseUrl();
+    return fetchFrom(`${base}/api/workspace`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+  }
+
+  wsListBtn.addEventListener('click', async () => {
+    wsResult.className='result-box pending'; wsResult.textContent='📂 Listando...';
+    try {
+      const data = await wsCall({action:'list', path: wsPath.value.trim(), depth: 2});
+      if(!data.ok){ throw new Error(data.error || 'fallo'); }
+      let out = `📂 ${data.path} (${data.count}):\n`;
+      (data.items||[]).forEach(i => { out += `  ${i.type==='dir'?'📁':'📄'} ${i.name}\n`; });
+      showResult(wsResult, out);
+    } catch(e){ showResult(wsResult, `Error: ${e.message}`, true); }
+  });
+
+  wsReadBtn.addEventListener('click', async () => {
+    const p = wsPath.value.trim();
+    if(!p){ showResult(wsResult, 'Ingresa una ruta.', true); return; }
+    wsResult.className='result-box pending'; wsResult.textContent=`👁️ Leyendo ${p}...`;
+    try {
+      const data = await wsCall({action:'read', path: p});
+      if(!data.ok){ throw new Error(data.error || 'fallo'); }
+      showResult(wsResult, `📄 ${data.path} (${data.size} bytes):\n\n${data.content}`);
+    } catch(e){ showResult(wsResult, `Error: ${e.message}`, true); }
+  });
+
+  wsWriteBtn.addEventListener('click', async () => {
+    const p = wsPath.value.trim();
+    const c = wsContent.value;
+    if(!p){ showResult(wsResult, 'Ingresa una ruta.', true); return; }
+    wsResult.className='result-box pending'; wsResult.textContent=`💾 Escribiendo ${p}...`;
+    try {
+      const data = await wsCall({action:'write', path: p, content: c});
+      if(!data.ok){ throw new Error(data.error || 'fallo'); }
+      showResult(wsResult, `✅ ${data.path} · ${data.bytes_written} bytes (${data.mode})\nResumen indexado en memoria [WORKSPACE].`);
+    } catch(e){ showResult(wsResult, `Error: ${e.message}`, true); }
+  });
+
+  wsMemoryBtn.addEventListener('click', async () => {
+    wsResult.className='result-box pending'; wsResult.textContent='🧠 Recuperando memorias [WORKSPACE]...';
+    try {
+      const data = await fetchFrom(`${BASE_URL || getBaseUrl()}/api/memory?limit=20`);
+      const ws = (data.memories || []).filter(m => String(m.kind || '').includes('WORKSPACE'));
+      if(!ws.length){ showResult(wsResult, 'Aún no hay recuerdos [WORKSPACE].'); return; }
+      let out = `🧠 ${ws.length} recuerdo(s) [WORKSPACE]:\n\n`;
+      ws.forEach((m,i) => { out += `#${i+1} ${String(m.content||'').slice(0,300)}\n\n`; });
+      showResult(wsResult, out);
+    } catch(e){ showResult(wsResult, `No se pudo leer la memoria: ${e.message}`, true); }
+  });
 
   // Auto-conectar al cargar: usa el host actual (nube) o la IP guardada (local)
   const saved = localStorage.getItem('aura_local_ip');
