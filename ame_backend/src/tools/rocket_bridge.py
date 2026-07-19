@@ -39,6 +39,9 @@ CMD_PREFIX = os.getenv("ROCKET_CMD_PREFIX", "!aura")
 # Señal para activar el Modo Libre desde Rocket.Chat.
 FREE_TRIGGER = "!libre"
 
+# Comando maestro de diagnóstico vivo + eco cross-channel.
+PING_ALL = "!ping_all"
+
 # Intervalo de polling del histórico del canal (segundos).
 _POLL_INTERVAL = float(os.getenv("ROCKET_POLL_INTERVAL", "5.0"))
 
@@ -413,6 +416,10 @@ class RocketChatBridge:
         return t
 
     async def _handle(self, prompt: str, user: str) -> None:
+        # Comando maestro !ping_all: diagnóstico vivo + ECO cross-channel.
+        if prompt.lower().startswith(PING_ALL.lower()):
+            await self._handle_ping_all(user)
+            return
         free_mode = prompt.lower().startswith(FREE_TRIGGER.lower())
         if free_mode:
             # Quitar el disparador '!libre' (insensible a mayúsculas).
@@ -442,3 +449,26 @@ class RocketChatBridge:
                 self.send_message(f"⚠️ Error de AURA: {exc}")
             except Exception:
                 pass
+
+    async def _handle_ping_all(self, user: str) -> None:
+        """!ping_all: diagnóstico vivo del tridente + eco cruzado a Discord."""
+        try:
+            from ame_backend.src.tools import live_diagnostics as ld
+
+            result = await ld.ping_all(
+                rocket_bridge=self,
+                discord_bridge=getattr(self, "companion_discord", None),
+                mesh_host=os.getenv("RENDER_URL"),
+            )
+            self.send_message(result["rocket_reply"])
+            if result.get("cross_channel_sent"):
+                self.send_message(
+                    "🔗 Eco cruzado enviado a Discord: verified desde Rocket.Chat."
+                )
+            else:
+                self.send_message(
+                    "⚠️ Discord no disponible para eco cruzado en este entorno."
+                )
+        except Exception as exc:
+            logger.error("!ping_all falló: %s", exc)
+            self.send_message(f"⚠️ Error en diagnóstico: {exc}")

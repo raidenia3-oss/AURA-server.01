@@ -29,6 +29,9 @@ ALERT_CHANNEL_ID = os.getenv("DISCORD_ALERT_CHANNEL_ID")
 # Señal para activar Modo Libre desde Discord.
 FREE_TRIGGER = "!libre"
 
+# Comando maestro de diagnóstico vivo + eco cross-channel.
+PING_ALL = "!ping_all"
+
 
 class DiscordBridge:
     """Orquesta el cliente de Discord y su integración con AURA."""
@@ -46,6 +49,7 @@ class DiscordBridge:
         self.client: Any = None
         self._task: Optional[asyncio.Task] = None
         self._available = self._check_available()
+        self.companion_rocket: Any = None  # puente Rocket.Chat para eco cruzado
 
     def _check_available(self) -> bool:
         if not self.token:
@@ -126,10 +130,34 @@ class DiscordBridge:
         except Exception as exc:
             logger.error("Discord Bridge cayó: %s", exc)
 
-    async def _handle(self, bot: Any, msg: Any, prompt: str) -> None:
-        free_mode = prompt.startswith(FREE_TRIGGER)
-        if free_mode:
-            prompt = prompt[len(FREE_TRIGGER):].strip()
+    async def _handle_ping_all(self, msg: Any) -> None:
+        """!ping_all: diagnóstico vivo del tridente + eco cruzado a Rocket.Chat."""
+        try:
+            from ame_backend.src.tools import live_diagnostics as ld
+
+            result = await ld.ping_all(
+                rocket_bridge=getattr(self, "companion_rocket", None),
+                discord_bridge=self,
+                mesh_host=os.getenv("RENDER_URL"),
+            )
+            chunks = [result["rocket_reply"][i : i + 1900]
+                      for i in range(0, len(result["rocket_reply"]), 1900)] or [result["rocket_reply"]]
+            for chunk in chunks[:4]:
+                await msg.channel.send(chunk)
+            if result.get("cross_channel_sent"):
+                await msg.channel.send(
+                    "🔗 Eco cruzado enviado a Rocket.Chat: verified desde Discord."
+                )
+            else:
+                await msg.channel.send(
+                    "⚠️ Rocket.Chat no disponible para eco cruzado en este entorno."
+                )
+        except Exception as exc:
+            logger.error("!ping_all falló: %s", exc)
+            try:
+                await msg.channel.send(f"⚠️ Error en diagnóstico: {exc}")
+            except Exception:
+                pass
         try:
             if free_mode:
                 res = self.router.chat(prompt=prompt, free_mode=True)

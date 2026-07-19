@@ -62,6 +62,10 @@ discord_bridge = discord_bridge_mod.DiscordBridge(ai, router_engine)
 # No-op si no están configuradas ROCKET_CHAT_URL + credenciales/webhook.
 rocket_bridge = rocket_bridge_mod.RocketChatBridge(ai, router_engine)
 
+# Enlace cruzado para el comando maestro !ping_all (eco entre puentes).
+discord_bridge.companion_rocket = rocket_bridge
+rocket_bridge.companion_discord = discord_bridge
+
 # Autonomia Total: Cron proactivo y Pool multi-agente (Cismas de Conciencia).
 cron_scheduler = cron_mod.CronScheduler(
     ai, discord_bridge,
