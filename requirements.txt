@@ -12,6 +12,7 @@ psycopg2-binary==2.9.12
 pymongo>=4.0
 httpx==0.28.1
 SQLAlchemy==2.0.36
+discord.py==2.5.2
 
 # Critical transitive dependencies (pinned for reproducible builds)
 pydantic==2.12.5

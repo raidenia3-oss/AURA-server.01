@@ -51,4 +51,11 @@ services:
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
+      # --- Red Soberana: Discord + Mesh privada ---
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: DISCORD_ALERT_CHANNEL_ID
+        sync: false
+      - key: MESH_KEY
+        sync: false
 

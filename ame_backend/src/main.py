@@ -38,6 +38,7 @@ from ame_backend.src.tools import workspace as workspace_tools
 from ame_backend.src.tools.multi_model_router import MultiModelRouter
 from ame_backend.src.tools import orchestrator as orchestrator_mod
 from ame_backend.src import neural_telemetry
+from ame_backend.src.tools import discord_bot as discord_bridge_mod
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,12 @@ ai = AIEngine()
 router_engine = MultiModelRouter(ai)
 task_mgr = TaskManager()
 db = Database()
+
+# Red de Comunicación Soberana: clientes WebSocket de la Mesh privada.
+mesh_clients: set = set()
+
+# Puente Táctico de Discord (no bloquea el arranque si falta token/librería).
+discord_bridge = discord_bridge_mod.DiscordBridge(ai, router_engine)
 
 # Núcleo Evolutivo: memoria (SQLAlchemy) + neurona + sys vitals + keep-alive.
 db_models.init_db()
@@ -679,6 +686,99 @@ def emergency() -> dict:
 
 
 # ------------------------------------------------------------------ #
+# Red de Comunicación Soberana — AmeAura Private Mesh
+# ------------------------------------------------------------------ #
+_MESH_KEY = os.getenv("MESH_KEY", "aura-mesh-secret")
+
+
+def _mesh_key_valid(provided: Optional[str]) -> bool:
+    if not _MESH_KEY:
+        return False
+    return provided == _MESH_KEY
+
+
+@app.get("/mesh")
+def mesh_mobile_page() -> HTMLResponse:
+    """Sirve la interfaz móvil ultra-ligera de la Red Privada (ciberpunk)."""
+    html_path = _STATIC_DIR / "mesh_mobile.html"
+    try:
+        return HTMLResponse(html_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return HTMLResponse(
+            "<html><body style='font-family:sans-serif'>"
+            "<h1>AmeAura Private Mesh</h1><p>mesh_mobile.html no encontrado.</p>"
+            "</body></html>"
+        )
+
+
+@app.websocket("/api/mesh/stream")
+async def mesh_stream(ws: WebSocket) -> None:
+    """WebSocket privado de la Mesh, protegido por header X-Mesh-Key.
+
+    El cliente envía JSON: {"prompt": "...", "free_mode": bool}.
+    El servidor responde con el texto de AURA (chat_with_tools o Modo Libre)
+    y puede difundir alertas de la Neurona a todos los nodos conectados.
+    """
+    provided = ws.headers.get("X-Mesh-Key") or ws.query_params.get("key")
+    if not _mesh_key_valid(provided):
+        await ws.accept()
+        await ws.send_text(json.dumps({"type": "error", "detail": "unauthorized"}))
+        await ws.close()
+        return
+    await ws.accept()
+    mesh_clients.add(ws)
+    try:
+        await ws.send_text(
+            json.dumps({"type": "ready", "provider": "AmeAura Private Mesh"})
+        )
+        while True:
+            data = await ws.receive_text()
+            try:
+                msg = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+            prompt = (msg.get("prompt") or "").strip()
+            if not prompt:
+                continue
+            free_mode = bool(msg.get("free_mode", False))
+            try:
+                if free_mode:
+                    res = router_engine.chat(prompt=prompt, free_mode=True)
+                    text = res.get("text") or res.get("error") or "(sin respuesta)"
+                    tag = "🔓 [Libre]"
+                else:
+                    res = ai.chat_with_tools(prompt=prompt)
+                    text = res.get("text") or "(sin respuesta)"
+                    tag = "🧠 [AURA]"
+                await ws.send_text(
+                    json.dumps({"type": "reply", "tag": tag, "text": text})
+                )
+            except Exception as exc:
+                logger.error("Mesh chat falló: %s", exc)
+                await ws.send_text(
+                    json.dumps({"type": "error", "detail": str(exc)})
+                )
+    except WebSocketDisconnect:
+        pass
+    finally:
+        mesh_clients.discard(ws)
+
+
+async def broadcast_mesh_alert(message: str) -> None:
+    """Difunde una alerta de la Neurona a todos los nodos de la Mesh."""
+    if not mesh_clients:
+        return
+    payload = json.dumps({"type": "alert", "text": message})
+    dead = set()
+    for client in list(mesh_clients):
+        try:
+            await client.send_text(payload)
+        except Exception:
+            dead.add(client)
+    mesh_clients.difference_update(dead)
+
+
+# ------------------------------------------------------------------ #
 # Servir el frontend (AURA UI / AmeAura, build de Vite) desde el mismo
 # origen que la API, para que todo el sistema AURA cargue en la URL raiz de
 # Render. Se registra DESPUES de todas las rutas /api/*, /health, /dashboard
@@ -702,16 +802,62 @@ app.mount("/api", telemetry_app)
 # Ciclo de vida / resiliencia
 # ------------------------------------------------------------------ #
 
+# Monitor de la Neurona: corre en su propio background task, ajeno al bucle
+# de telemetría del WebSocket bridge. Dispara alertas de la Red Soberana
+# (Discord + Mesh privada) cuando la estabilidad cae o hay keep-alive crítico.
+_neural_monitor_task: Optional[asyncio.Task] = None
+
+
+async def _neural_monitor_loop() -> None:
+    last_alert = 0.0
+    while True:
+        try:
+            vitals = collect_sys_vitals()
+            tick = core.tick(vitals, alive=True)
+            inst = tick.get("instability")
+            ka = tick.get("keep_alive_fired", 0)
+            now = asyncio.get_event_loop().time()
+            if inst and (now - last_alert) > 30.0:
+                msg = (
+                    f"Neurona inestable (estabilidad={tick.get('stability'):.3f}, "
+                    f"keep_alive={ka}). AURA manteniendo el sistema en línea."
+                )
+                discord_bridge.alert(msg)
+                await broadcast_mesh_alert(msg)
+                last_alert = now
+        except Exception as exc:
+            logger.error("Monitor de neurona falló: %s", exc)
+        await asyncio.sleep(5.0)
+
+
 @app.on_event("startup")
 async def on_startup() -> None:
     logger.info("AURA Backend starting up")
     await healer.start()
+    # Red Soberana: arrancar Discord bridge y monitor de neurona (no bloquean).
+    discord_bridge.start()
+    global _neural_monitor_task
+    _neural_monitor_task = asyncio.create_task(
+        _neural_monitor_loop(), name="neural-monitor"
+    )
 
 
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
     logger.info("AURA Backend shutting down")
     await healer.stop()
+    try:
+        await discord_bridge.stop()
+    except Exception as exc:
+        logger.error("Error deteniendo Discord bridge: %s", exc)
+    global _neural_monitor_task
+    if _neural_monitor_task is not None:
+        _neural_monitor_task.cancel()
+        try:
+            await _neural_monitor_task
+        except Exception:
+            pass
+        _neural_monitor_task = None
     try:
         now_iso = datetime.now().isoformat()
         saved = db.read("data/db.json", default={})
