@@ -40,6 +40,8 @@ from ame_backend.src.tools import orchestrator as orchestrator_mod
 from ame_backend.src import neural_telemetry
 from ame_backend.src.tools import discord_bot as discord_bridge_mod
 from ame_backend.src.tools import knowledge_ingest as knowledge_ingest_mod
+from ame_backend.src.tools import cron_scheduler as cron_mod
+from ame_backend.src.tools import agents_pool as agents_pool_mod
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +56,14 @@ mesh_clients: set = set()
 
 # Puente Táctico de Discord (no bloquea el arranque si falta token/librería).
 discord_bridge = discord_bridge_mod.DiscordBridge(ai, router_engine)
+
+# Autonomia Total: Cron proactivo y Pool multi-agente (Cismas de Conciencia).
+cron_scheduler = cron_mod.CronScheduler(
+    ai, discord_bridge,
+    broadcast_fn=lambda payload: asyncio.ensure_future(broadcast_mesh(payload)),
+    stability_provider=lambda: (core.last_stability or 1.0),
+)
+agents_pool = agents_pool_mod.AgentsPool(ai, router_engine)
 
 # Núcleo Evolutivo: memoria (SQLAlchemy) + neurona + sys vitals + keep-alive.
 db_models.init_db()
@@ -276,6 +286,26 @@ def chat(payload: dict) -> dict:
                         logger.error("WS mem: %s", exc)
         except Exception as exc:
             logger.error("Tool calling falló, usando chat normal: %s", exc)
+
+    # Cismas de Conciencia: si la tarea es [COMPLEJA], AURA ramifica en
+    # sub-agentes (Architect + Shadow) que debaten 2 rondas y devuelven la
+    # solucion ya filtrada y auditada (se ejecuta en hilo aparte, sin bloquear
+    # el event loop de FastAPI).
+    if agents_pool_mod.is_complex(prompt) and not payload.get("free_mode"):
+        try:
+            debate = agents_pool.debate_sync(prompt)
+            if debate.get("ok") and debate.get("solution"):
+                text = debate["solution"]
+                provider = "multi-agent"
+                try:
+                    memory.remember(
+                        f"[COMPLEJA] Debate multi-agente resuelto: {prompt[:200]}",
+                        kind="[COMPLEJA]",
+                    )
+                except Exception as exc:
+                    logger.error("Debate mem: %s", exc)
+        except Exception as exc:
+            logger.error("Debate multi-agente fallo, usando chat normal: %s", exc)
 
     # Memoria de estado: guardar la respuesta real del asistente.
     try:
@@ -908,6 +938,9 @@ async def on_startup() -> None:
         _neural_monitor_loop(), name="neural-monitor"
     )
 
+    # Autonomia Total: arrancar Cron proactivo (despertar + guardián salud).
+    cron_scheduler.start()
+
 
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
@@ -917,6 +950,10 @@ async def on_shutdown() -> None:
         await discord_bridge.stop()
     except Exception as exc:
         logger.error("Error deteniendo Discord bridge: %s", exc)
+    try:
+        await cron_scheduler.stop()
+    except Exception as exc:
+        logger.error("Error deteniendo Cron scheduler: %s", exc)
     global _neural_monitor_task
     if _neural_monitor_task is not None:
         _neural_monitor_task.cancel()
