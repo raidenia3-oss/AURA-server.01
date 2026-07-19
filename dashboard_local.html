@@ -51,6 +51,17 @@
   .result-box.success{border-color:#00ff88}
   .result-box.error{border-color:#ff4444;color:#ff6666}
   .result-box.pending{color:#888;font-style:italic}
+  .vision-card{border-color:#7b2ff7}
+  .vision-card h2{color:#7b2ff7}
+  .drop-zone{
+    border:2px dashed #2a2a4e;border-radius:12px;padding:1.2rem;text-align:center;
+    cursor:pointer;transition:.2s;margin-bottom:1rem;color:#888
+  }
+  .drop-zone:hover,.drop-zone.dragover{border-color:#7b2ff7;color:#b388ff;background:#161630}
+  .drop-zone.has-file{border-color:#00ff88;color:#00ff88}
+  .preview-img{max-width:100%;max-height:220px;border-radius:10px;margin-top:.8rem;display:none}
+  .vision-meta{font-size:.75rem;color:#666;margin-top:.4rem;font-family:monospace}
+  .memory-tag{display:inline-block;background:#1a1a2e;color:#7b2ff7;font-family:monospace;font-size:.75rem;padding:.2rem .6rem;border-radius:4px;margin-right:.3rem}
   .status-grid{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-top:.8rem}
   .status-item{
     background:#0d0d20;border:1px solid #1a1a3e;border-radius:8px;
@@ -114,6 +125,27 @@
     </div>
     <div class="btn-group">
       <button class="secondary" id="refreshStatusBtn">🔄 Refrescar estado</button>
+    </div>
+  </div>
+
+  <!-- MÓDULO DE VISIÓN -->
+  <div class="card vision-card">
+    <h2>👁️ Módulo de Visión</h2>
+    <p class="sub" style="margin-bottom:1rem">Análisis multimodal nativo con Gemini 2.0 Flash · AURA recuerda visualmente vía <span class="memory-tag">[VISION]</span></p>
+    <div class="drop-zone" id="visionDrop">
+      📷 Arrastra o haz clic para subir una imagen (PNG, JPEG, WEBP)
+      <input type="file" id="visionFile" accept="image/png,image/jpeg,image/webp" hidden>
+      <img id="visionPreview" class="preview-img" alt="preview">
+      <div class="vision-meta" id="visionFileMeta"></div>
+    </div>
+    <label for="visionPrompt">Instrucción para AURA (opcional)</label>
+    <div class="input-row">
+      <input type="text" id="visionPrompt" placeholder="Describe esta imagen en detalle.">
+      <button id="visionBtn">👁️ Analizar</button>
+    </div>
+    <div class="result-box pending" id="visionResult">Sube una imagen para activar la visión de AURA.</div>
+    <div class="btn-group">
+      <button class="secondary" id="visionMemoryBtn">🧠 Ver memoria [VISION]</button>
     </div>
   </div>
 
@@ -258,6 +290,95 @@
   });
 
   refreshBtn.addEventListener('click', testConnection);
+
+  // --- MÓDULO DE VISIÓN ---
+  const visionDrop = document.getElementById('visionDrop');
+  const visionFile = document.getElementById('visionFile');
+  const visionPreview = document.getElementById('visionPreview');
+  const visionFileMeta = document.getElementById('visionFileMeta');
+  const visionPrompt = document.getElementById('visionPrompt');
+  const visionBtn = document.getElementById('visionBtn');
+  const visionResult = document.getElementById('visionResult');
+  const visionMemoryBtn = document.getElementById('visionMemoryBtn');
+
+  let visionSelectedFile = null;
+
+  function setVisionFile(file){
+    if(!file) return;
+    const allowed = ['image/png','image/jpeg','image/webp'];
+    if(!allowed.includes(file.type)){
+      showResult(visionResult, `Tipo no soportado: ${file.type || 'desconocido'}. Usa PNG, JPEG o WEBP.`, true);
+      return;
+    }
+    visionSelectedFile = file;
+    visionDrop.classList.add('has-file');
+    visionFileMeta.textContent = `${file.name} · ${(file.size/1024).toFixed(1)} KB · ${file.type}`;
+    const reader = new FileReader();
+    reader.onload = e => {
+      visionPreview.src = e.target.result;
+      visionPreview.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  visionDrop.addEventListener('click', () => visionFile.click());
+  visionFile.addEventListener('change', e => setVisionFile(e.target.files[0]));
+  ['dragover','dragenter'].forEach(ev => visionDrop.addEventListener(ev, e => { e.preventDefault(); visionDrop.classList.add('dragover'); }));
+  ['dragleave','drop'].forEach(ev => visionDrop.addEventListener(ev, e => { e.preventDefault(); visionDrop.classList.remove('dragover'); }));
+  visionDrop.addEventListener('drop', e => {
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if(f) setVisionFile(f);
+  });
+
+  async function runVision(){
+    if(!visionSelectedFile){
+      showResult(visionResult, 'Primero selecciona una imagen.', true);
+      return;
+    }
+    visionResult.className = 'result-box pending';
+    visionResult.textContent = '👁️ AURA está mirando...';
+    visionBtn.disabled = true;
+    try {
+      const fd = new FormData();
+      fd.append('file', visionSelectedFile);
+      fd.append('prompt', visionPrompt.value.trim() || 'Describe esta imagen en detalle.');
+      const resp = await fetch(`${BASE_URL || getBaseUrl()}/api/vision`, {
+        method: 'POST',
+        body: fd,
+        signal: AbortSignal.timeout(60000)
+      });
+      const data = await resp.json().catch(() => ({}));
+      if(!resp.ok){
+        throw new Error(data.detail || data.error || `HTTP ${resp.status}`);
+      }
+      showResult(visionResult, `👁️ Análisis (${data.provider || 'ai'}):\n\n${data.analysis || '(sin texto)'}`);
+    } catch(e){
+      showResult(visionResult, `Error de visión: ${e.message}`, true);
+    } finally {
+      visionBtn.disabled = false;
+    }
+  }
+
+  async function showVisionMemory(){
+    visionResult.className = 'result-box pending';
+    visionResult.textContent = '🧠 Recuperando memorias [VISION]...';
+    try {
+      const data = await fetchFrom(`${BASE_URL || getBaseUrl()}/api/memory?limit=20`);
+      const visions = (data.memories || []).filter(m => String(m.kind || '').includes('VISION'));
+      if(!visions.length){
+        showResult(visionResult, 'Aún no hay recuerdos visuales [VISION] en el subconsciente.');
+        return;
+      }
+      let out = `🧠 ${visions.length} recuerdo(s) visual(es):\n\n`;
+      visions.forEach((m, i) => { out += `#${i+1} [${m.kind}] ${String(m.content || '').slice(0,300)}\n\n`; });
+      showResult(visionResult, out);
+    } catch(e){
+      showResult(visionResult, `No se pudo leer la memoria: ${e.message}`, true);
+    }
+  }
+
+  visionBtn.addEventListener('click', runVision);
+  visionMemoryBtn.addEventListener('click', showVisionMemory);
 
   // Auto-conectar al cargar: usa el host actual (nube) o la IP guardada (local)
   const saved = localStorage.getItem('aura_local_ip');

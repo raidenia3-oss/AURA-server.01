@@ -5,12 +5,13 @@ Servicio unificado para orquestar múltiples proveedores de IA.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
 import requests
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -149,6 +150,63 @@ class AIEngine:
                 return [self.preference] + [p for p in self.providers if p != self.preference]
         return list(self.providers.keys())
 
+    def vision(
+        self,
+        prompt: str,
+        image_bytes: bytes,
+        mime_type: str = "image/jpeg",
+        context: Optional[str] = None,
+        model_override: Optional[str] = None,
+        provider_override: Optional[str] = "gemini",
+    ) -> Dict[str, Any]:
+        """Analisis multimodal nativo: texto + imagen via Gemini 2.0 Flash."""
+        if not image_bytes:
+            return {"text": "No se recibio imagen.", "provider": "none"}
+        providers = self._resolve_providers(provider_override)
+        last_error: Optional[Exception] = None
+        for provider in providers:
+            try:
+                cfg = self.providers[provider]
+                if provider == "gemini":
+                    return self._call_gemini_vision(
+                        cfg, prompt, image_bytes, mime_type, context, model_override
+                    )
+                # Fallback: descripción base si el proveedor no es multimodal.
+                return {
+                    "text": "(Proveedor sin vision nativa; se requiere Gemini para imagenes)",
+                    "provider": provider,
+                }
+            except Exception as e:
+                last_error = e
+        return {
+            "text": f"Vision error: {last_error}",
+            "error": str(last_error) if last_error else "Unknown error",
+            "provider": "none",
+        }
+
+    def _call_gemini_vision(
+        self, cfg, prompt, image_bytes, mime_type, context, model_override
+    ) -> Dict[str, Any]:
+        url = (
+            f"{cfg['url']}/models/{model_override or cfg['model']}"
+            f":generateContent?key={cfg['api_key']}"
+        )
+        payload = {
+            "contents": self._contents_multimodal(
+                prompt, image_bytes, mime_type, context
+            )
+        }
+        r = self.session.post(url, json=payload, timeout=cfg["timeout"])
+        r.raise_for_status()
+        data = r.json()
+        candidates = data.get("candidates") or []
+        if not candidates:
+            return {"text": "", "raw": data, "provider": "gemini"}
+        text = (
+            candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        )
+        return {"text": text, "provider": "gemini"}
+
     def _call_provider(
         self,
         provider: str,
@@ -199,6 +257,24 @@ class AIEngine:
         parts = []
         if context:
             parts.append({"text": context})
+        parts.append({"text": prompt})
+        return [{"parts": parts}]
+
+    def _contents_multimodal(
+        self, prompt: str, image_bytes: bytes, mime_type: str, context: Optional[str] = None
+    ) -> list:
+        """Contenido multimodal nativo de Gemini: texto + imagen inline."""
+        parts = []
+        if context:
+            parts.append({"text": context})
+        parts.append(
+            {
+                "inline_data": {
+                    "mime_type": mime_type,
+                    "data": base64.b64encode(image_bytes).decode("ascii"),
+                }
+            }
+        )
         parts.append({"text": prompt})
         return [{"parts": parts}]
 

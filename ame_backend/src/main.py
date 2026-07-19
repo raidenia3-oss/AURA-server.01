@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -236,6 +236,66 @@ def memory_endpoint(limit: int = 20) -> dict:
     except Exception as exc:
         logger.error("No se pudo leer memoria: %s", exc)
         return {"memories": [], "total": 0, "error": str(exc)}
+
+
+# ------------------------------------------------------------------ #
+# Módulo de Visión (multimodal nativo con Gemini 2.0 Flash)
+# ------------------------------------------------------------------ #
+_ALLOWED_IMAGE_TYPES = {
+    "image/png": "png",
+    "image/jpeg": "jpeg",
+    "image/jpg": "jpeg",
+    "image/webp": "webp",
+}
+
+
+@app.post("/api/vision")
+async def vision(file: UploadFile = File(...), prompt: str = "Describe esta imagen en detalle."):
+    """Recibe una imagen y la analiza con visión multimodal de Gemini.
+
+    El análisis generado se indexa en ``semantic_memory`` con
+    ``kind='[VISION]'`` para que AURA recuerde visualmente lo procesado.
+    """
+    content_type = (file.content_type or "").lower()
+    if content_type not in _ALLOWED_IMAGE_TYPES:
+        return {
+            "error": "tipo_no_soportado",
+            "detail": f"Usa png, jpeg o webp (recibido: {content_type or 'desconocido'})",
+        }
+
+    raw = await file.read()
+    if not raw:
+        return {"error": "imagen_vacia", "detail": "No se recibieron bytes."}
+
+    try:
+        result = ai.vision(prompt=prompt, image_bytes=raw, mime_type=content_type)
+    except Exception as exc:
+        logger.error("Fallo de vision: %s", exc)
+        return {"error": "vision_error", "detail": str(exc)}
+
+    text = result.get("text", "")
+    provider = result.get("provider")
+
+    # Memoria de estado: guardar el analisis visual en el subconsciente.
+    try:
+        db_models.save_message(
+            role="user",
+            content=f"[VISION] {prompt}",
+            provider=provider,
+            session_id="vision",
+        )
+        db_models.save_message(
+            role="assistant",
+            content=text,
+            provider=provider,
+            session_id="vision",
+        )
+        # Indexar en memoria semántica (RAG) para recordar visualmente.
+        memory.remember(f"[VISION] {prompt}\n{text}", kind="[VISION]")
+    except Exception as exc:
+        logger.error("No se pudo guardar vision en memoria: %s", exc)
+
+    return {"analysis": text, "provider": provider}
 
 
 @app.get("/neural/status")
