@@ -833,6 +833,10 @@ async def mesh_stream(ws: WebSocket) -> None:
             prompt = (msg.get("prompt") or "").strip()
             if not prompt:
                 continue
+            # Macro de estado: el cliente móvil pide telemetría tri-puente.
+            if prompt == "__status__":
+                await ws.send_text(json.dumps(_bridge_status_payload()))
+                continue
             free_mode = bool(msg.get("free_mode", False))
             try:
                 if free_mode:
@@ -934,6 +938,30 @@ async def _neural_monitor_loop() -> None:
         await asyncio.sleep(5.0)
 
 
+# Telemetría Tri-Puente: difunde periódicamente a la Mesh Móvil el estado de
+# disponibilidad (is_available) de los tres puentes de comunicación soberanos
+# para que los LED virtuales [MESH]/[DSCD]/[RCKT] del HUD se iluminen.
+_bridge_status_task: Optional[asyncio.Task] = None
+
+
+def _bridge_status_payload() -> dict:
+    return {
+        "type": "bridges",
+        "mesh": len(mesh_clients) > 0,  # hay al menos un nodo móvil conectado
+        "discord": bool(getattr(discord_bridge, "is_available", False)),
+        "rocket": bool(getattr(rocket_bridge, "is_available", False)),
+    }
+
+
+async def _bridge_status_loop() -> None:
+    while True:
+        try:
+            await broadcast_mesh(_bridge_status_payload())
+        except Exception as exc:  # pragma: no cover - resiliencia
+            logger.error("Telemetría tri-puente falló: %s", exc)
+        await asyncio.sleep(7.0)
+
+
 @app.on_event("startup")
 async def on_startup() -> None:
     logger.info("AURA Backend starting up")
@@ -944,6 +972,10 @@ async def on_startup() -> None:
     global _neural_monitor_task
     _neural_monitor_task = asyncio.create_task(
         _neural_monitor_loop(), name="neural-monitor"
+    )
+    global _bridge_status_task
+    _bridge_status_task = asyncio.create_task(
+        _bridge_status_loop(), name="bridge-status"
     )
 
     # Autonomia Total: arrancar Cron proactivo (despertar + guardián salud).
@@ -974,6 +1006,14 @@ async def on_shutdown() -> None:
         except Exception:
             pass
         _neural_monitor_task = None
+    global _bridge_status_task
+    if _bridge_status_task is not None:
+        _bridge_status_task.cancel()
+        try:
+            await _bridge_status_task
+        except Exception:
+            pass
+        _bridge_status_task = None
     try:
         now_iso = datetime.now().isoformat()
         saved = db.read("data/db.json", default={})

@@ -36,6 +36,17 @@
   header .net{margin-left:auto; font-size:.6rem; color:#6a8; display:flex; align-items:center; gap:5px}
   header .net .led{width:8px;height:8px;border-radius:50%;background:var(--warn);box-shadow:0 0 8px var(--warn)}
 
+  /* HUD de puentes tri-comunicación (cyberpunk LED indicators) */
+  .bridges{display:flex; gap:6px; padding:6px 10px; background:var(--panel); border-bottom:1px solid var(--grid)}
+  .br{display:flex; align-items:center; gap:5px; flex:1; justify-content:center;
+      background:#080812; border:1px solid var(--grid); border-radius:7px; padding:5px 4px}
+  .br .bname{font-size:.56rem; letter-spacing:1px; color:#7a9; font-weight:700}
+  .br .bled{width:9px; height:9px; border-radius:50%; background:var(--warn);
+      box-shadow:0 0 6px var(--warn)}
+  .br.on .bled{background:var(--neon); box-shadow:0 0 9px var(--neon)}
+  .br.off .bled{animation:blink 1s steps(2,start) infinite}
+  @keyframes blink{50%{opacity:.15; box-shadow:none}}
+
   /* HUD neural */
   .hud{
     display:flex; align-items:center; gap:10px; padding:8px 12px;
@@ -103,6 +114,12 @@
   </div>
 </div>
 
+<div class="bridges">
+  <div class="br" id="brMesh"><span class="bled"></span><span class="bname">[MESH]</span></div>
+  <div class="br" id="brDscd"><span class="bled"></span><span class="bname">[DSCD]</span></div>
+  <div class="br" id="brRckt"><span class="bled"></span><span class="bname">[RCKT]</span></div>
+</div>
+
 <div class="toolbar">
   <div class="btn toggle" id="modeBtn">🔓 MODO LIBRE<span class="sub" id="modeSub">Dolphin-Mixtral OFF</span></div>
   <div class="btn" id="memBtn">🧠 VER MEMORIA<span class="sub">[VISION]/[WORKSPACE]</span></div>
@@ -136,6 +153,9 @@
   const netTxt = document.getElementById('netTxt');
   const stabFill = document.getElementById('stabFill');
   const stabVal = document.getElementById('stabVal');
+  const brMesh = document.getElementById('brMesh');
+  const brDscd = document.getElementById('brDscd');
+  const brRckt = document.getElementById('brRckt');
   const modeBtn = document.getElementById('modeBtn');
   const modeSub = document.getElementById('modeSub');
   const memBtn = document.getElementById('memBtn');
@@ -159,16 +179,27 @@
     stabVal.textContent = v.toFixed(3);
     stabFill.classList.toggle('low', v < 0.35);
   }
+  // Indicadores LED tri-puente: verde = activo, rojo parpadeante = desconectado.
+  function setBridge(el, on){
+    if(on === null || on === undefined){ el.classList.remove('on','off'); return; }
+    el.classList.toggle('on', !!on);
+    el.classList.toggle('off', !on);
+  }
 
   function connect(){
+    setBridge(brMesh, null); setBridge(brDscd, null); setBridge(brRckt, null);
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     ws = new WebSocket(`${proto}://${location.host}/api/mesh/stream?key=${encodeURIComponent(meshKey)}`);
-    ws.onopen = () => { netTxt.textContent='EN LÍNEA'; netLed.style.background='var(--neon)'; netLed.style.boxShadow='0 0 8px var(--neon)'; };
+    ws.onopen = () => {
+      netTxt.textContent='EN LÍNEA'; netLed.style.background='var(--neon)'; netLed.style.boxShadow='0 0 8px var(--neon)';
+      if(ws.readyState===1) ws.send(JSON.stringify({prompt:'__status__', free_mode:false}));
+    };
     ws.onmessage = (e) => {
       let m; try { m = JSON.parse(e.data); } catch(_) { return; }
       if(m.type==='ready'){ addMsg('ai', `<span class="tag">sistema</span>${m.provider} lista.`); }
       else if(m.type==='reply'){ addMsg('ai', `<span class="tag">${m.tag||''}</span>${(m.text||'').replace(/</g,'&lt;')}`); }
       else if(m.type==='neural'){ setStability(m.stability); }
+      else if(m.type==='bridges'){ setBridge(brMesh, m.mesh); setBridge(brDscd, m.discord); setBridge(brRckt, m.rocket); }
       else if(m.type==='alert'){ addMsg('alert', `🚨 ${m.text}`); }
       else if(m.type==='error'){ addMsg('ai', `<span class="tag">error</span>${(m.detail||'')}`); if(m.detail==='unauthorized'){ localStorage.removeItem('aura_mesh_key'); meshKey=''; keyModal.classList.remove('hidden'); } }
     };

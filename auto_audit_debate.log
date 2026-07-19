@@ -1,0 +1,14 @@
+2026-07-19 15:14:09,884 INFO AURA.AutoAudit: === CISMA DE CONCIENCIA: AUTO-AUDITORIA ===
+2026-07-19 15:14:09,884 INFO AURA.AutoAudit: Task: [COMPLEJA] Auditar los archivos tools/rocket_bridge.py y tools/cron_scheduler.py en busqueda de posibles condiciones de carrera (race conditions) o cuellos de botella asincronos
+2026-07-19 15:14:09,884 INFO AURA.AutoAudit: Rondas: 2 | Architect calls: 3 | Shadow calls: 2
+2026-07-19 15:14:09,885 INFO AURA.AutoAudit: Architect round2: [Architect] Analisis limpio de: El enfoque crudo (Shadow) fue:
+[Shadow] Abordaje crudo/offensivo de: [AURA-Shado
+2026-07-19 15:14:09,885 INFO AURA.AutoAudit: Shadow round2: [Shadow] Abordaje crudo/offensivo de: La solución limpia (Architect) fue:
+[Architect] Analisis limpio de: [AURA-Archit
+2026-07-19 15:14:09,885 INFO AURA.AutoAudit: SINTESIS OPTIMIZADA: [AURA-Synth] Sintesis optimizada y auditada del debate.
+
+2026-07-19 18:38:31 INFO AURA.AutoAudit: === SOLUCIONES APLICADAS (auto-auditoria real, codigo) ===
+2026-07-19 18:38:31 INFO AURA-Synth: Parche 1 [rocket_bridge]: I/O HTTP bloqueante movido a run_in_executor via _areq/_apost/_aget -> el event loop de FastAPI ya no se congela (elimina cuello de botella asincrono).
+2026-07-19 18:38:31 INFO AURA-Synth: Parche 2 [rocket_bridge]: credenciales authToken/userId protegidas con asyncio.Lock en _login para evitar race condition con send_message/alert (monitor de neurona).
+2026-07-19 18:38:31 INFO AURA-Synth: Parche 3 [rocket_bridge]: login ahora async + log de enlace de produccion detallado (authToken enmascarado) y flag is_connected.
+2026-07-19 18:38:31 INFO AURA-Synth: Parche 4 [cron_scheduler]: _emit delega alertas bloqueantes (Discord/Rocket) a run_in_executor y usa get_running_loop() en vez de get_event_loop() deprecado.

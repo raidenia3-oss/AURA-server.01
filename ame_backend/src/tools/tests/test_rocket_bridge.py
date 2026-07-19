@@ -90,7 +90,16 @@ class FakeRequests:
         self.logged_in = False
 
     def post(self, url, json=None, headers=None, timeout=30):
-        self.posts.append((url, json, headers))
+        return self.request("POST", url, json=json, headers=headers, timeout=timeout)
+
+    def get(self, url, params=None, headers=None, timeout=30):
+        return self.request("GET", url, params=params, headers=headers, timeout=timeout)
+
+    def request(self, method, url, json=None, params=None, headers=None, timeout=30):
+        if method == "POST":
+            self.posts.append((url, json, headers))
+        else:
+            self.gets.append((url, params, headers))
         if url.endswith("/api/v1/login"):
             self.logged_in = True
             return _Resp(200, {"status": "success", "data": {
@@ -99,16 +108,11 @@ class FakeRequests:
             return _Resp(200, {"success": True, "message": {"_id": "m1"}})
         if url.endswith("/hooks/"):
             return _Resp(200, {"success": True})
-        return _Resp(404, {"error": "not_found"})
-
-    def get(self, url, params=None, headers=None, timeout=30):
-        self.gets.append((url, params, headers))
         if url.endswith("/api/v1/channels.info"):
             return _Resp(200, {"channel": {"_id": "ROOM-AURA-CORE", "name": "aura-core"}})
         if url.endswith("/api/v1/channels.list"):
             return _Resp(200, {"channels": [{"_id": "ROOM-AURA-CORE", "name": "aura-core"}]})
         if url.endswith("/api/v1/channels.history") or url.endswith("/api/v1/groups.history"):
-            # Historial vacío: el test inyecta el mensaje manualmente vía _inject.
             return _Resp(200, {"messages": FakeRequests._history})
         return _Resp(404, {"error": "not_found"})
 
@@ -149,12 +153,12 @@ def main() -> int:
     check("bridge configurado (is_available)", bridge.is_available,
           f"base_url={bridge.base_url}")
 
-    # --- Login simulado ---
-    ok = bridge._login()
+    # --- Login simulado (async, vía executor) ---
+    ok = asyncio.run(bridge._login())
     check("login Rocket.Chat (mock)", ok and fake.logged_in)
 
-    # --- Resolución de canal #aura-core ---
-    room = bridge._resolve_room_id(rb.ROCKET_CHANNEL)
+    # --- Resolución de canal #aura-core (async) ---
+    room = asyncio.run(bridge._resolve_room_id(rb.ROCKET_CHANNEL))
     check("resolución de #aura-core", room == "ROOM-AURA-CORE", f"roomId={room}")
 
     # ----------------------------------------------------------------- #

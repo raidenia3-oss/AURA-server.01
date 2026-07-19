@@ -166,9 +166,24 @@ class CronScheduler:
         return out
 
     # ------------------------------------------------------------------ #
-    # Emisión multi-canal (Discord + Mesh)
+    # Emisión multi-canal (Discord + Rocket.Chat + Mesh)
     # ------------------------------------------------------------------ #
     def _emit(self, message: str) -> None:
+        # [PARCHE AUTO-AUDITORÍA] Las alertas de Discord/Rocket son llamadas
+        # síncronas bloqueantes (requests). Para no estranglar el scheduler
+        # asíncrono, se delegan a un executor. Se usa get_running_loop() para
+        # evitar el get_event_loop() deprecado cuando no hay loop en este hilo.
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is not None:
+            loop.run_in_executor(None, self._emit_blocking, message)
+        else:
+            # Fuera de un loop (p.ej. test síncrono): ejecutar directo.
+            self._emit_blocking(message)
+
+    def _emit_blocking(self, message: str) -> None:
         try:
             if self.discord is not None:
                 self.discord.alert(message)
@@ -181,15 +196,10 @@ class CronScheduler:
             logger.error("Cron Rocket.Chat emit falló: %s", exc)
         try:
             if self.broadcast is not None:
-                coro = self.broadcast({"type": "cron", "text": message})
-                # Si es corutina, programarla en el loop actual.
+                # broadcast_mesh es una corutina; se programa en el loop vivo.
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        asyncio.ensure_future(coro)
-                    else:
-                        asyncio.run(coro)
+                    asyncio.ensure_future(self.broadcast({"type": "cron", "text": message}))
                 except RuntimeError:
-                    asyncio.ensure_future(coro)
+                    pass
         except Exception as exc:
             logger.error("Cron Mesh emit falló: %s", exc)

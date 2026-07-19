@@ -23,6 +23,7 @@ background task (asyncio), ajeno al bucle de telemetría de la neurona.
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import os
 from typing import Any, Callable, Optional
@@ -68,7 +69,19 @@ class RocketChatBridge:
         self._user_id: Optional[str] = None
         self._task: Optional[asyncio.Task] = None
         self._last_ts: str = "0"
+        # [PARCHE AUTO-AUDITORÍA] Lock para proteger el estado de credenciales
+        # (authToken/userId) que se muta en _login (task del bridge) y se lee en
+        # _post/_get/send_message/alert (también invocados desde el monitor de
+        # la neurona). Sin esto hay una condición de carrera de estado mutable.
+        self._cred_lock = asyncio.Lock()
+        # Flag de conexión de producción (enlazado al login real).
+        self._connected = False
         self._available = self._check_available()
+
+    @property
+    def is_connected(self) -> bool:
+        """True tras un login exitoso con auth token real de Rocket.Chat."""
+        return self._connected
 
     # ------------------------------------------------------------------ #
     # Disponibilidad / resiliencia (no-op si no está configurado)
@@ -95,6 +108,40 @@ class RocketChatBridge:
         return self._available
 
     # ------------------------------------------------------------------ #
+    # Cliente HTTP asíncrono (sin bloquear el event loop)
+    # ------------------------------------------------------------------ #
+    # [PARCHE AUTO-AUDITORÍA] Las llamadas requests son BLOQUEANTES. Ejecutarlas
+    # dentro del event loop de FastAPI congela todo AURA (cuello de botella
+    # asíncrono). Se delegan a un thread del executor vía run_in_executor,
+    # manteniendo el loop libre para la Neurona y la Mesh.
+    async def _areq(self, method: str, url: str, **kwargs: Any) -> Optional[dict]:
+        """Envía una petición HTTP en un executor y devuelve el JSON o None."""
+        loop = asyncio.get_event_loop()
+        try:
+            return await loop.run_in_executor(
+                None,
+                functools.partial(self._sync_req, method, url, **kwargs),
+            )
+        except Exception as exc:  # pragma: no cover - resiliencia
+            logger.error("Rocket.Chat %s falló (%s): %s", method, url, exc)
+            return None
+
+    def _sync_req(self, method: str, url: str, **kwargs: Any) -> Optional[dict]:
+        import requests
+
+        resp = requests.request(method, url, timeout=kwargs.pop("timeout", 30), **kwargs)
+        if resp.status_code >= 400:
+            logger.error(
+                "Rocket.Chat %s %s -> %s: %s",
+                method, url, resp.status_code, resp.text[:200],
+            )
+            return None
+        try:
+            return resp.json()
+        except Exception:
+            return None
+
+    # ------------------------------------------------------------------ #
     # Ciclo de vida
     # ------------------------------------------------------------------ #
     def start(self) -> None:
@@ -116,94 +163,99 @@ class RocketChatBridge:
     # ------------------------------------------------------------------ #
     # Cliente HTTP (requests, ya en requirements)
     # ------------------------------------------------------------------ #
+    # [PARCHE AUTO-AUDITORÍA] _post/_get son SÍNCRONOS (se usan desde
+    # send_message/alert, invocados desde el monitor de la neurona). Las
+    # variantes _apost/_aget son ASÍNCRONAS y corren en un executor para no
+    # bloquear el event loop del bridge.
+    def _headers(self, auth: bool = True) -> dict:
+        h = {"Content-Type": "application/json"}
+        if auth and self._auth_token and self._user_id:
+            h["X-Auth-Token"] = self._auth_token
+            h["X-User-Id"] = self._user_id
+        return h
+
     def _post(self, path: str, json: dict, auth: bool = True) -> Optional[dict]:
         if not self._available:
             return None
-        try:
-            import requests
-
-            headers = {"Content-Type": "application/json"}
-            if auth and self._auth_token and self._user_id:
-                headers["X-Auth-Token"] = self._auth_token
-                headers["X-User-Id"] = self._user_id
-            resp = requests.post(
-                f"{self.base_url}{path}", json=json, headers=headers, timeout=30
-            )
-            if resp.status_code >= 400:
-                logger.error(
-                    "Rocket.Chat POST %s -> %s: %s",
-                    path,
-                    resp.status_code,
-                    resp.text[:200],
-                )
-                return None
-            return resp.json()
-        except Exception as exc:  # pragma: no cover - resiliencia
-            logger.error("Rocket.Chat POST falló (%s): %s", path, exc)
-            return None
+        return self._sync_req(
+            "POST", f"{self.base_url}{path}", json=json, headers=self._headers(auth)
+        )
 
     def _get(self, path: str, params: Optional[dict] = None) -> Optional[dict]:
         if not self._available:
             return None
-        try:
-            import requests
+        return self._sync_req(
+            "GET", f"{self.base_url}{path}", params=params or {}, headers=self._headers(True)
+        )
 
-            headers = {"X-Auth-Token": self._auth_token, "X-User-Id": self._user_id}
-            resp = requests.get(
-                f"{self.base_url}{path}",
-                params=params or {},
-                headers=headers,
-                timeout=30,
-            )
-            if resp.status_code >= 400:
-                logger.error(
-                    "Rocket.Chat GET %s -> %s: %s",
-                    path,
-                    resp.status_code,
-                    resp.text[:200],
-                )
-                return None
-            return resp.json()
-        except Exception as exc:  # pragma: no cover - resiliencia
-            logger.error("Rocket.Chat GET falló (%s): %s", path, exc)
+    async def _apost(self, path: str, json: dict, auth: bool = True) -> Optional[dict]:
+        if not self._available:
             return None
+        return await self._areq(
+            "POST", f"{self.base_url}{path}", json=json, headers=self._headers(auth)
+        )
+
+    async def _aget(self, path: str, params: Optional[dict] = None) -> Optional[dict]:
+        if not self._available:
+            return None
+        return await self._areq(
+            "GET", f"{self.base_url}{path}", params=params or {}, headers=self._headers(True)
+        )
 
     # ------------------------------------------------------------------ #
     # Autenticación REST
     # ------------------------------------------------------------------ #
-    def _login(self) -> bool:
+    async def _login(self) -> bool:
         if not (self.user and self.password):
             # Modo solo-webhook: no requiere login de usuario.
             return bool(self.webhook_url)
-        res = self._post(
-            "/api/v1/login",
-            {"user": self.user, "password": self.password},
-            auth=False,
+        # [PARCHE AUTO-AUDITORÍA] El lock serializa la mutación de credenciales
+        # frente a lecturas concurrentes desde send_message/alert (monitor).
+        async with self._cred_lock:
+            res = await self._apost(
+                "/api/v1/login",
+                {"user": self.user, "password": self.password},
+                auth=False,
+            )
+            if not res or not res.get("data", {}).get("authToken"):
+                status = (res or {}).get("status") or "sin_respuesta"
+                logger.error(
+                    "Rocket.Chat login FALLÓ para '%s' (status=%s). El puente "
+                    "quedará inactivo hasta reintentar en el próximo ciclo.",
+                    self.user, status,
+                )
+                self._connected = False
+                return False
+            self._auth_token = res["data"]["authToken"]
+            self._user_id = res["data"]["userId"]
+            self._connected = True
+        # Log de producción detallado: confirma la recepción del auth token real
+        # (enmascarado) para saber que el enlace con Rocket.Chat está vivo.
+        token_mask = (self._auth_token[:6] + "…" + self._auth_token[-4:]) \
+            if self._auth_token and len(self._auth_token) > 10 else "***"
+        logger.info(
+            "✅ Rocket.Chat ENLACE DE PRODUCCIÓN establecido: autenticado como "
+            "'%s' (userId=%s, authToken=%s). Servidor: %s",
+            self.user, self._user_id, token_mask, self.base_url,
         )
-        if not res or not res.get("data", {}).get("authToken"):
-            logger.error("Rocket.Chat login falló para %s", self.user)
-            return False
-        self._auth_token = res["data"]["authToken"]
-        self._user_id = res["data"]["userId"]
-        logger.info("Rocket.Chat autenticado como %s", self.user)
         return True
 
-    def _resolve_room_id(self, channel: str) -> Optional[str]:
+    async def _resolve_room_id(self, channel: str) -> Optional[str]:
         """Resuelve el roomId de #canal (o nombre directo) para el polling."""
         # Intenta canal público.
-        res = self._get(
+        res = await self._aget(
             "/api/v1/channels.info", params={"roomName": channel.lstrip("#")}
         )
         if res and res.get("channel", {}).get("_id"):
             return res["channel"]["_id"]
         # Intenta grupo privado.
-        res = self._get(
+        res = await self._aget(
             "/api/v1/groups.info", params={"roomName": channel.lstrip("#")}
         )
         if res and res.get("group", {}).get("_id"):
             return res["group"]["_id"]
         # Fallback: listar canales y buscar coincidencia.
-        res = self._get("/api/v1/channels.list", params={"count": 200})
+        res = await self._aget("/api/v1/channels.list", params={"count": 200})
         for ch in (res or {}).get("channels", []):
             if ch.get("name") == channel.lstrip("#"):
                 return ch.get("_id")
@@ -213,6 +265,24 @@ class RocketChatBridge:
     # ------------------------------------------------------------------ #
     # Envío de mensajes
     # ------------------------------------------------------------------ #
+    def _resolve_room_id_sync(self, channel: str) -> Optional[str]:
+        """Versión SÍNCRONA para send_message/alert (contexto sin await)."""
+        res = self._get(
+            "/api/v1/channels.info", params={"roomName": channel.lstrip("#")}
+        )
+        if res and res.get("channel", {}).get("_id"):
+            return res["channel"]["_id"]
+        res = self._get(
+            "/api/v1/groups.info", params={"roomName": channel.lstrip("#")}
+        )
+        if res and res.get("group", {}).get("_id"):
+            return res["group"]["_id"]
+        res = self._get("/api/v1/channels.list", params={"count": 200})
+        for ch in (res or {}).get("channels", []):
+            if ch.get("name") == channel.lstrip("#"):
+                return ch.get("_id")
+        return None
+
     def send_message(self, text: str, channel: Optional[str] = None) -> bool:
         """Publica un mensaje vía API REST o Incoming Webhook.
 
@@ -241,7 +311,7 @@ class RocketChatBridge:
             if not (self._auth_token and self._user_id):
                 return False
         # 2) API REST autenticada.
-        room_id = self._resolve_room_id(target)
+        room_id = self._resolve_room_id_sync(target)
         if not room_id:
             return False
         res = self._post(
@@ -277,10 +347,10 @@ class RocketChatBridge:
 
     async def _run(self) -> None:
         try:
-            if not self._login():
+            if not await self._login():
                 logger.warning("Rocket.Chat bridge inactivo: sin autenticación.")
                 return
-            room_id = self._resolve_room_id(ROCKET_CHANNEL)
+            room_id = await self._resolve_room_id(ROCKET_CHANNEL)
             if not room_id:
                 logger.warning("Rocket.Chat bridge detenido: canal no resoluble.")
                 return
@@ -298,13 +368,14 @@ class RocketChatBridge:
             logger.error("Rocket.Chat Bridge cayó: %s", exc)
 
     async def _poll_once(self, room_id: str) -> None:
-        res = self._get(
+        # [PARCHE AUTO-AUDITORÍA] I/O asíncrono vía executor: no bloquea el loop.
+        res = await self._aget(
             "/api/v1/channels.history",
             params={"roomId": room_id, "count": 20},
         )
         if not res:
             # Reintenta como grupo privado.
-            res = self._get(
+            res = await self._aget(
                 "/api/v1/groups.history", params={"roomId": room_id, "count": 20}
             )
         if not res:
