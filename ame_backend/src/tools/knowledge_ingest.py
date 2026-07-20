@@ -147,8 +147,8 @@ def _fetch_url(url: str) -> str:
         return ""
 
 
-def ingest_text(text: str, source: str = "manual") -> Dict[str, Any]:
-    """Ingesta un bloque de texto: chunking + embeddings + [KNOWLEDGE]."""
+def ingest_text(text: str, source: str = "manual", kind: str = "[KNOWLEDGE]") -> Dict[str, Any]:
+    """Ingesta un bloque de texto: chunking + embeddings + tag personalizable."""
     if SemanticMemory is None:
         return {"ok": False, "error": "semantic_memory_no_disponible"}
     chunks = _split_into_chunks(text)
@@ -157,9 +157,9 @@ def ingest_text(text: str, source: str = "manual") -> Dict[str, Any]:
     mem = SemanticMemory()
     stored = 0
     for i, chunk in enumerate(chunks):
-        label = f"[KNOWLEDGE] ({source}) p{i+1}/{len(chunks)}: {chunk}"
+        label = f"{kind} ({source}) p{i+1}/{len(chunks)}: {chunk}"
         try:
-            if mem.remember(label, kind="[KNOWLEDGE]") is not None:
+            if mem.remember(label, kind=kind) is not None:
                 stored += 1
         except Exception:
             pass
@@ -169,6 +169,11 @@ def ingest_text(text: str, source: str = "manual") -> Dict[str, Any]:
         "stored": stored,
         "source": source,
     }
+
+
+def ingest_long_term_memory(text: str, source: str = "cognitive-sleep") -> Dict[str, Any]:
+    """Ingesta memoria de largo plazo: chunking + embeddings + [LONG_TERM_MEMORY]."""
+    return ingest_text(text, source=source, kind="[LONG_TERM_MEMORY]")
 
 
 def ingest_url(url: str) -> Dict[str, Any]:

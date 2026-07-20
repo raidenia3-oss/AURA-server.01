@@ -31,6 +31,8 @@ _HEALTH_STABILITY_FLOOR = float(os.getenv("CRON_HEALTH_FLOOR", "0.4"))
 _HEALTH_SUSTAIN_SAMPLES = int(os.getenv("CRON_HEALTH_SUSTAIN", "3"))
 # Hora local de despertar (24h).
 _WAKE_HOUR = int(os.getenv("CRON_WAKE_HOUR", "7"))
+# Hora local del ciclo de sueño cognitivo (24h).
+_SLEEP_HOUR = int(os.getenv("CRON_SLEEP_HOUR", "3"))
 
 _NEWS_SOURCES = [
     "https://techcrunch.com/",
@@ -62,6 +64,8 @@ class CronScheduler:
         self._rocket_err_samples = 0
         # Umbral de ticks ERR seguidos antes de forzar reconnect().
         self._rocket_err_threshold = int(os.getenv("CRON_ROCKET_ERR_TICKS", "3"))
+        # Control de unicidad del ciclo de sueño cognitivo.
+        self._last_sleep_day = -1
 
     # ------------------------------------------------------------------ #
     # Ciclo de vida
@@ -78,7 +82,10 @@ class CronScheduler:
         self._tasks.append(
             asyncio.create_task(self._rocket_watchdog_loop(), name="cron-rocket-watchdog")
         )
-        logger.info("CronScheduler arrancado (salud + despertar + watchdog Rocket).")
+        self._tasks.append(
+            asyncio.create_task(self._cognitive_sleep_cycle(), name="cron-cognitive-sleep")
+        )
+        logger.info("CronScheduler arrancado (salud + despertar + watchdog Rocket + sueño cognitivo).")
 
     async def stop(self) -> None:
         for t in self._tasks:
@@ -252,3 +259,127 @@ class CronScheduler:
                     pass
         except Exception as exc:
             logger.error("Cron Mesh emit falló: %s", exc)
+
+    # ------------------------------------------------------------------ #
+    # Tarea 3: Ciclo de Sueño Cognitivo (consolidación nocturna de memoria)
+    # ------------------------------------------------------------------ #
+    async def _cognitive_sleep_cycle(self) -> None:
+        """Ejecuta un ciclo de prueba rápido al arrancar y luego a las 3:00 AM."""
+        await self._run_cognitive_sleep_cycle(quick=True)
+        while True:
+            try:
+                now = time.localtime()
+                if now.tm_hour == _SLEEP_HOUR and now.tm_mday != self._last_sleep_day:
+                    self._last_sleep_day = now.tm_mday
+                    await self._run_cognitive_sleep_cycle(quick=False)
+            except Exception as exc:
+                logger.error("Cron cognitive sleep falló: %s", exc)
+            await asyncio.sleep(60.0)
+
+    async def _run_cognitive_sleep_cycle(self, quick: bool = False) -> None:
+        """Recolecta actividad del día, sintetiza conocimiento y lo inyecta en el RAG."""
+        try:
+            logs_text = self._collect_daily_logs()
+            chats_text = self._collect_recent_chats(quick=quick)
+            raw_material = f"{logs_text}\n\n{chats_text}".strip()
+            if not raw_material or len(raw_material) < 50:
+                logger.info("Cognitive sleep: material insuficiente (%d chars), omitiendo ciclo.", len(raw_material))
+                return
+
+            synthesis = await asyncio.to_thread(self._synthesize_knowledge, raw_material)
+            if not synthesis:
+                logger.warning("Cognitive sleep: síntesis vacía.")
+                return
+
+            ingest_result = await asyncio.to_thread(self._inject_to_rag, synthesis)
+            stored = int(ingest_result.get("stored", 0) or 0)
+            chunks = int(ingest_result.get("chunks", 0) or 0)
+            logger.info(
+                "Cognitive sleep completado: synthesis_len=%d, ingested=%d/%d chunks",
+                len(synthesis), stored, chunks,
+            )
+            self._emit(
+                f"💤 SUEÑO COGNITIVO: ciclo {'rápido (test)' if quick else 'nocturno'} completado. "
+                f"{stored} fragmentos de memoria de largo plazo indexados."
+            )
+        except Exception as exc:
+            logger.error("Cognitive sleep cycle falló: %s", exc)
+
+    def _collect_daily_logs(self) -> str:
+        """Lee los archivos de logs del día desde la raíz del proyecto."""
+        try:
+            project_root = Path(__file__).resolve().parents[3]
+        except Exception:
+            return ""
+        log_files = [
+            "auto_audit_debate.log",
+            "rocket_bridge_test.log",
+            "admin_audit.log",
+            "audit.log",
+        ]
+        today = time.strftime("%Y-%m-%d")
+        parts: List[str] = []
+        for name in log_files:
+            path = project_root / name
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="ignore")
+                today_lines = [line for line in text.splitlines() if today in line]
+                if today_lines:
+                    parts.append(f"\n--- {name} ---\n" + "\n".join(today_lines[-200:]))
+            except Exception:
+                pass
+        return "\n".join(parts)
+
+    def _collect_recent_chats(self, quick: bool = False) -> str:
+        """Lee el historial de chat reciente desde la base de datos."""
+        try:
+            from ame_backend.src import models as db_models
+            limit = 20 if quick else 100
+            msgs = db_models.recent_messages(limit=limit)
+            if not msgs:
+                return ""
+            today = time.strftime("%Y-%m-%d")
+            lines: List[str] = []
+            for m in msgs:
+                ts = m.get("created_at", "") or ""
+                if not ts.startswith(today):
+                    continue
+                role = m.get("role", "?")
+                content = m.get("content", "")
+                lines.append(f"[{ts}] {role}: {content[:500]}")
+            return "\n".join(lines)
+        except Exception as exc:
+            logger.error("Error leyendo chat history para sueño cognitivo: %s", exc)
+            return ""
+
+    def _synthesize_knowledge(self, raw_material: str) -> str:
+        """Invoca al enrutador en modo de síntesis para filtrar ruido y generar resumen ejecutivo."""
+        prompt = (
+            "Eres el sintetizador cognitivo nocturno de AURA. "
+            "Filtra el ruido de logs y el historial de chat del día. "
+            "Extrae SOLO conocimiento de alta densidad:\n"
+            "1. Optimizaciones de código descubiertas o aplicadas\n"
+            "2. Comandos clave y configuraciones\n"
+            "3. Interacciones humanas importantes (feedback, decisiones, errores relevantes)\n\n"
+            "Genera un resumen ejecutivo compacto en bulletpoints. "
+            "Omite errores transitorios de red, timeouts y ruido de conexión. "
+            "Máximo 1200 palabras. No incluyas introducciones ni conclusiones."
+        )
+        ctx = f"[MATERIAL DEL DÍA]\n{raw_material[:20000]}"
+        try:
+            res = self.ai.chat(prompt=prompt, context=ctx)
+            return res.get("text", "").strip()
+        except Exception as exc:
+            logger.error("Síntesis cognitiva falló: %s", exc)
+            return ""
+
+    def _inject_to_rag(self, summary: str) -> Dict[str, Any]:
+        """Pasa el resumen sintetizado al módulo de ingesta bajo [LONG_TERM_MEMORY]."""
+        try:
+            from ame_backend.src.tools.knowledge_ingest import ingest_long_term_memory
+            return ingest_long_term_memory(summary, source="cognitive-sleep-cycle")
+        except Exception as exc:
+            logger.error("Inyección RAG de largo plazo falló: %s", exc)
+            return {"ok": False, "error": str(exc)}
