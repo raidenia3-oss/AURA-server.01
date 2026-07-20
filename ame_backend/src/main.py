@@ -942,25 +942,58 @@ async def _neural_monitor_loop() -> None:
         await asyncio.sleep(5.0)
 
 
-# Telemetría Tri-Puente: difunde periódicamente a la Mesh Móvil el estado de
-# disponibilidad (is_available) de los tres puentes de comunicación soberanos
-# para que los LED virtuales [MESH]/[DSCD]/[RCKT] del HUD se iluminen.
+# Telemetría Tri-Puente en VIVO: difunde periódicamente a la Mesh Móvil las
+# latencias REALES detectadas en producción por live_diagnostics.py.
+# Formato: {mesh:"local", discord:"42ms", rocket:"18ms"} o "ERR" si no
+# responde / falla auth. Los LED [MESH]/[DSCD]/[RCKT] del HUD lo imprimen.
 _bridge_status_task: Optional[asyncio.Task] = None
 
 
-def _bridge_status_payload() -> dict:
-    return {
-        "type": "bridges",
-        "mesh": len(mesh_clients) > 0,  # hay al menos un nodo móvil conectado
-        "discord": bool(getattr(discord_bridge, "is_available", False)),
-        "rocket": bool(getattr(rocket_bridge, "is_available", False)),
-    }
+def _latency_label(report: dict) -> str:
+    """Convierte un reporte de canal en etiqueta: '18ms', 'local' o 'ERR'."""
+    if not report.get("configured"):
+        return "OFF"
+    if not report.get("reachable") or not report.get("authenticated"):
+        return "ERR"
+    lat = report.get("latency_ms")
+    if lat is None:
+        return "OK"
+    return f"{lat}ms"
+
+
+async def _bridge_status_payload() -> dict:
+    try:
+        from ame_backend.src.tools import live_diagnostics as ld
+
+        rep = await ld.run_live_diagnostics(
+            discord_bridge=discord_bridge,
+            mesh_host=os.getenv("RENDER_URL"),
+        )
+        by_name = {c.get("service"): c for c in rep.get("channels", [])}
+        mesh = by_name.get("Mesh", {})
+        discord = by_name.get("Discord", {})
+        rocket = by_name.get("Rocket.Chat", {})
+        return {
+            "type": "bridges",
+            # Mesh: "local" si hay clientes conectados, si no la latencia/ERR.
+            "mesh": "local" if mesh_clients else _latency_label(mesh),
+            "discord": _latency_label(discord),
+            "rocket": _latency_label(rocket),
+        }
+    except Exception as exc:  # pragma: no cover - resiliencia
+        logger.error("Telemetría tri-puente falló: %s", exc)
+        return {
+            "type": "bridges",
+            "mesh": "local" if mesh_clients else "ERR",
+            "discord": "ERR",
+            "rocket": "ERR",
+        }
 
 
 async def _bridge_status_loop() -> None:
     while True:
         try:
-            await broadcast_mesh(_bridge_status_payload())
+            await broadcast_mesh(await _bridge_status_payload())
         except Exception as exc:  # pragma: no cover - resiliencia
             logger.error("Telemetría tri-puente falló: %s", exc)
         await asyncio.sleep(7.0)

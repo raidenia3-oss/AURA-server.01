@@ -163,6 +163,33 @@ class RocketChatBridge:
                 pass
             self._task = None
 
+    async def reconnect(self) -> bool:
+        """Auto-reparación: reintenta el login de producción de forma segura.
+
+        Usa el mismo asyncio.Lock de credenciales que _login para NO colisionar
+        con send_message/alert (que las leen concurrentemente desde el monitor
+        de la neurona). Si el login real falla, marca is_connected=False y el
+        Guardián de Salud del Cron volverá a invocarlo tras 3 ticks de ERR.
+        """
+        if not self._available:
+            logger.warning("Rocket.Chat reconnect omitido: puente no configurado.")
+            return False
+        async with self._cred_lock:
+            logger.info("🔧 Rocket.Chat: intento de auto-reparación (reconnect)…")
+            self._connected = False
+            ok = await self._login()
+            if ok:
+                # Reanudar el loop de polling si estaba caído.
+                room_id = await self._resolve_room_id(ROCKET_CHANNEL)
+                if room_id and (self._task is None or self._task.done()):
+                    self._task = asyncio.create_task(self._run(), name="rocket-bridge")
+                    logger.info("🔧 Rocket.Chat: polling relanzado tras reparación.")
+        if ok:
+            logger.info("✅ Rocket.Chat: auto-reparación exitosa (reconectado).")
+        else:
+            logger.warning("⚠️ Rocket.Chat: auto-reparación falló; reintento programado.")
+        return ok
+
     # ------------------------------------------------------------------ #
     # Cliente HTTP (requests, ya en requirements)
     # ------------------------------------------------------------------ #

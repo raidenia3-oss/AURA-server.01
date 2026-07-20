@@ -336,18 +336,29 @@ async def ping_all(
     """
     report = await run_live_diagnostics(discord_bridge, mesh_host)
 
-    # Construir tabla de latencias para la respuesta en Rocket.Chat.
-    lines = ["🔥 **Diagnóstico Vivo del Tridente (Fuego Real)**"]
-    for c in report["channels"]:
-        lat = c.get("latency_ms")
-        lat_s = f"{lat} ms" if lat is not None else "—"
-        flag = "🟢" if (c.get("reachable") and c.get("authenticated")) else "🔴"
-        lines.append(f"{flag} **{c.get('service')}** · lat={lat_s} · {c.get('detail','')}")
-    lines.append(
-        "✅ Todos los puentes conectados" if report["all_up"]
-        else "⚠️ Algunos puentes inactivos"
+    # Formateo militar de terminal para el comando !ping_all.
+    by_name = {c.get("service"): c for c in report.get("channels", [])}
+    mesh = by_name.get("Mesh", {})
+    discord = by_name.get("Discord", {})
+    rocket = by_name.get("Rocket.Chat", {})
+
+    def _fmt(c: dict) -> str:
+        if not c.get("configured"):
+            return "OFFLINE"
+        if c.get("reachable") and c.get("authenticated"):
+            lat = c.get("latency_ms")
+            lat_s = f"{lat}ms" if lat is not None else "OK"
+            return f"OPERATIONAL ({lat_s})"
+        return "ERR"
+
+    status = "ALL SYSTEMS OPERATIONAL" if report["all_up"] else "DEGRADED — CHECK CHANNELS"
+    rocket_msg = (
+        "[AURA SWARM TELEMETRY]\n"
+        f"> MESH GATEWAY: {_fmt(mesh)}\n"
+        f"> DISCORD MESH: {_fmt(discord)}\n"
+        f"> ROCKET BRIDGE: {_fmt(rocket)}\n"
+        f" STATUS: {status}"
     )
-    rocket_msg = "\n".join(lines)
 
     # ECO cruzado: Rocket.Chat -> Discord (en paralelo, sin bloquear).
     discord_echo = "🔗 [ECO] Conexión cruzada verificada con éxito desde Rocket.Chat"

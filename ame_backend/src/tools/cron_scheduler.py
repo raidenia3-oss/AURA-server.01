@@ -58,6 +58,10 @@ class CronScheduler:
         self._tasks: List[asyncio.Task] = []
         self._low_samples = 0
         self._last_wake_day = -1
+        # Muestras consecutivas de fallo del puente Rocket.Chat (para auto-reparo).
+        self._rocket_err_samples = 0
+        # Umbral de ticks ERR seguidos antes de forzar reconnect().
+        self._rocket_err_threshold = int(os.getenv("CRON_ROCKET_ERR_TICKS", "3"))
 
     # ------------------------------------------------------------------ #
     # Ciclo de vida
@@ -71,7 +75,10 @@ class CronScheduler:
         self._tasks.append(
             asyncio.create_task(self._daily_wake_loop(), name="cron-wake")
         )
-        logger.info("CronScheduler arrancado (salud + despertar).")
+        self._tasks.append(
+            asyncio.create_task(self._rocket_watchdog_loop(), name="cron-rocket-watchdog")
+        )
+        logger.info("CronScheduler arrancado (salud + despertar + watchdog Rocket).")
 
     async def stop(self) -> None:
         for t in self._tasks:
@@ -106,6 +113,48 @@ class CronScheduler:
             except Exception as exc:
                 logger.error("Cron health guard falló: %s", exc)
             await asyncio.sleep(10.0)
+
+    # ------------------------------------------------------------------ #
+    # Tarea 1b: Watchdog de auto-reparación del puente Rocket.Chat
+    # ------------------------------------------------------------------ #
+    async def _rocket_watchdog_loop(self) -> None:
+        """Vincula el Guardián de Salud a live_diagnostics.
+
+        Sonda Rocket.Chat cada pocos segundos; si is_connected pasa a False o
+        da 'ERR' durante 3 ticks seguidos en producción, invoca la corrutina
+        asíncrona de reconexión rocket.reconnect(). El intento usa el lock de
+        credenciales interno, por lo que NO colisiona con las alertas
+        concurrentes de la neurona (send_message/alert).
+        """
+        while True:
+            try:
+                rocket = self.rocket
+                if rocket is not None and getattr(rocket, "is_available", False):
+                    from ame_backend.src.tools import live_diagnostics as ld
+
+                    rep = await ld.ping_rocket()
+                    healthy = bool(rep.get("reachable") and rep.get("authenticated"))
+                    if healthy and getattr(rocket, "is_connected", False):
+                        self._rocket_err_samples = 0
+                    else:
+                        self._rocket_err_samples += 1
+                        logger.warning(
+                            "Watchdog Rocket.Chat: muestra de fallo %d/%d (%s).",
+                            self._rocket_err_samples,
+                            self._rocket_err_threshold,
+                            rep.get("detail", ""),
+                        )
+                        if self._rocket_err_samples >= self._rocket_err_threshold:
+                            self._rocket_err_samples = 0  # reinicia tras intentar
+                            if hasattr(rocket, "reconnect"):
+                                logger.info("Watchdog Rocket.Chat: forzando reconnect().")
+                                # reconnect es async con su propio lock seguro.
+                                asyncio.ensure_future(rocket.reconnect())
+                else:
+                    self._rocket_err_samples = 0
+            except Exception as exc:
+                logger.error("Cron rocket watchdog falló: %s", exc)
+            await asyncio.sleep(15.0)
 
     # ------------------------------------------------------------------ #
     # Tarea 2: Despertar matutino con noticias críticas
