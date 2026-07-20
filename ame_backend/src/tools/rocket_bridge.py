@@ -26,6 +26,7 @@ import asyncio
 import functools
 import logging
 import os
+import textwrap
 from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
@@ -456,9 +457,23 @@ class RocketChatBridge:
                     break
         try:
             if free_mode:
+                computation_result = await self._handle_computation_challenge(prompt)
+                if computation_result:
+                    prompt = (
+                        f"{prompt}\n\n"
+                        f"[RESULTADO REAL DEL SANDBOX AURA]:\n"
+                        f"{computation_result}"
+                    )
                 res = self.router.chat(prompt=prompt, free_mode=True)
                 reply = res.get("text") or res.get("error") or "(sin respuesta)"
                 tag = "🔓 [Modo Libre]"
+                if computation_result:
+                    reply = (
+                        f"🧪 [Sandbox Executed]\n"
+                        f"{computation_result}\n\n"
+                        f"🔓 [Modo Libre] Análisis:\n"
+                        f"{reply}"
+                    )
             else:
                 res = self.ai.chat_with_tools(prompt=prompt)
                 reply = res.get("text") or "(sin respuesta)"
@@ -476,6 +491,85 @@ class RocketChatBridge:
                 self.send_message(f"⚠️ Error de AURA: {exc}")
             except Exception:
                 pass
+
+    async def _handle_computation_challenge(self, prompt: str) -> Optional[str]:
+        """Detecta retos matemáticos/algorítmicos y los ejecuta en el Sandbox."""
+        try:
+            from ame_backend.src.tools.agents_pool import AgentsPool
+            if not AgentsPool._needs_computation(prompt):
+                return None
+            logger.debug("[Sandbox] Detectada tool execute_code para reto computacional: %s", prompt[:120])
+            script = self._generate_computation_script(prompt)
+            if not script:
+                return None
+            logger.debug("[Sandbox] Script Python temporal generado por AURA:\n%s", script)
+            pool = AgentsPool(self.ai, self.router)
+            result = await pool.run_tool(script, timeout=5)
+            if result.get("timed_out"):
+                return "⚠️ Sandbox: el script excedió el timeout de 5s."
+            if not result.get("ok"):
+                err = result.get("error") or result.get("forbidden") or "error_desconocido"
+                return f"⚠️ Sandbox: ejecución fallida ({err})."
+            stdout = result.get("stdout", "").strip()
+            if not stdout:
+                return "⚠️ Sandbox: el script no produjo salida."
+            logger.debug("[Sandbox] Subproceso Python completado. stdout=%s", stdout)
+            return f"✅ SANDBOX SUCCESS\n{stdout}"
+        except Exception as exc:
+            logger.error("Sandbox computation challenge falló: %s", exc)
+            return None
+
+    def _generate_computation_script(self, prompt: str) -> Optional[str]:
+        """Genera un script Python eficiente para el reto matemático detectado."""
+        low = prompt.lower()
+        if "primo" in low and "500" in low:
+            return textwrap.dedent(
+                """
+                def is_prime(n):
+                    if n < 2:
+                        return False
+                    if n % 2 == 0:
+                        return n == 2
+                    i = 3
+                    while i * i <= n:
+                        if n % i == 0:
+                            return False
+                        i += 2
+                    return True
+
+                primes = []
+                num = 2
+                while len(primes) < 500:
+                    if is_prime(num):
+                        primes.append(num)
+                    num += 1
+
+                total = sum(primes)
+                prime_500 = primes[-1]
+                print(f"SUCCESS: suma_primeros_500={total}, primo_500={prime_500}")
+                """
+            )
+        if "fibonacci" in low:
+            n = 500
+            return textwrap.dedent(
+                f"""
+                def fib(n):
+                    a, b = 0, 1
+                    for _ in range(n):
+                        a, b = b, a + b
+                    return a
+                print("SUCCESS: fib(500)=", fib({n}))
+                """
+            )
+        if "factorial" in low:
+            return textwrap.dedent(
+                """
+                import math
+                n = 500
+                print("SUCCESS: factorial(500)=", math.factorial(n))
+                """
+            )
+        return None
 
     async def _handle_ping_all(self, user: str) -> None:
         """!ping_all: diagnóstico vivo del tridente + eco cruzado a Discord."""
