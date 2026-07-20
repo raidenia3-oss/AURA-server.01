@@ -795,8 +795,15 @@ def _mesh_key_valid(provided: Optional[str]) -> bool:
 
 
 @app.get("/mesh")
-def mesh_mobile_page() -> HTMLResponse:
+def mesh_mobile_page(key: Optional[str] = None) -> HTMLResponse:
     """Sirve la interfaz móvil ultra-ligera de la Red Privada (ciberpunk)."""
+    if key != os.getenv("MESH_KEY", "aura-mesh-secret"):
+        return HTMLResponse(
+            "<html><body style='font-family:sans-serif'>"
+            "<h1>Acceso denegado</h1><p>Clave de la mesh inválida.</p>"
+            "</body></html>",
+            status_code=401,
+        )
     html_path = _STATIC_DIR / "mesh_mobile.html"
     try:
         return HTMLResponse(html_path.read_text(encoding="utf-8"))
