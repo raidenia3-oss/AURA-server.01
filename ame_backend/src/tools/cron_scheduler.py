@@ -33,6 +33,8 @@ _HEALTH_SUSTAIN_SAMPLES = int(os.getenv("CRON_HEALTH_SUSTAIN", "3"))
 _WAKE_HOUR = int(os.getenv("CRON_WAKE_HOUR", "7"))
 # Hora local del ciclo de sueño cognitivo (24h).
 _SLEEP_HOUR = int(os.getenv("CRON_SLEEP_HOUR", "3"))
+# Hora local del centinela de ciberseguridad (24h).
+_SECURITY_HOUR = int(os.getenv("CRON_SECURITY_HOUR", "4"))
 
 _NEWS_SOURCES = [
     "https://techcrunch.com/",
@@ -66,6 +68,8 @@ class CronScheduler:
         self._rocket_err_threshold = int(os.getenv("CRON_ROCKET_ERR_TICKS", "3"))
         # Control de unicidad del ciclo de sueño cognitivo.
         self._last_sleep_day = -1
+        # Control de unicidad del escaneo de seguridad.
+        self._last_security_day = -1
 
     # ------------------------------------------------------------------ #
     # Ciclo de vida
@@ -85,7 +89,10 @@ class CronScheduler:
         self._tasks.append(
             asyncio.create_task(self._cognitive_sleep_cycle(), name="cron-cognitive-sleep")
         )
-        logger.info("CronScheduler arrancado (salud + despertar + watchdog Rocket + sueño cognitivo).")
+        self._tasks.append(
+            asyncio.create_task(self._security_sentinel_loop(), name="cron-security-sentinel")
+        )
+        logger.info("CronScheduler arrancado (salud + despertar + watchdog Rocket + sueño cognitivo + centinela seguridad).")
 
     async def stop(self) -> None:
         for t in self._tasks:
@@ -383,3 +390,71 @@ class CronScheduler:
         except Exception as exc:
             logger.error("Inyección RAG de largo plazo falló: %s", exc)
             return {"ok": False, "error": str(exc)}
+
+    # ------------------------------------------------------------------ #
+    # Tarea 4: Centinela de Ciberseguridad (escaneo defensivo proactivo)
+    # ------------------------------------------------------------------ #
+    async def _security_sentinel_loop(self) -> None:
+        """Escanea amenazas de seguridad al iniciar y luego una vez al día."""
+        await self._run_security_scan(quick=True)
+        while True:
+            try:
+                now = time.localtime()
+                if now.tm_hour == _SECURITY_HOUR and now.tm_mday != self._last_security_day:
+                    self._last_security_day = now.tm_mday
+                    await self._run_security_scan(quick=False)
+            except Exception as exc:
+                logger.error("Cron security sentinel falló: %s", exc)
+            await asyncio.sleep(60.0)
+
+    async def _run_security_scan(self, quick: bool = False) -> None:
+        """Ejecuta el escaneo y dispara alertas inmediatas si hay amenazas críticas/altas."""
+        try:
+            from ame_backend.src.tools.security_sentinel import SecuritySentinel
+            sentinel = SecuritySentinel()
+            result = await sentinel.run_vulnerability_scan()
+        except Exception as exc:
+            logger.error("Security sentinel scan falló: %s", exc)
+            return
+
+        if not result.get("ok"):
+            return
+
+        threats = result.get("threats", [])
+        critical_high = [t for t in threats if t.get("severity") in ("CRITICAL", "HIGH")]
+        logger.info(
+            "Security scan completado: %d amenazas (%d críticas/altas)",
+            result.get("total_threats", 0),
+            result.get("critical_high_count", 0),
+        )
+
+        if not critical_high:
+            return
+
+        alert_lines = [
+            "🛑🚨🛑🚨🛑🚨🛑🚨🛑🚨",
+            "ALERTA DE CIBERSEGURIDAD — SEVERIDAD CRÍTICA/ALTA",
+            "🛑🚨🛑🚨🛑🚨🛑🚨🛑🚨",
+            "",
+            f"[Centinela AURA] Amenazas detectadas: {len(critical_high)} CRÍTICAS/ALTAS",
+            "",
+        ]
+        for t in critical_high[:5]:
+            icon = "☠️" if t.get("severity") == "CRITICAL" else "⚠️"
+            alert_lines.append(f"{icon} [{t.get('severity', '?')}] {t.get('category', '?')}: {t.get('detail', '')}")
+            rec = t.get("recommendation")
+            if rec:
+                alert_lines.append(f"   ➜ {rec}")
+        alert_msg = "\n".join(alert_lines)
+
+        if self.rocket is not None and getattr(self.rocket, "is_available", False):
+            try:
+                self.rocket.alert(alert_msg)
+            except Exception as exc:
+                logger.error("Security alert Rocket.Chat falló: %s", exc)
+        if self.discord is not None:
+            try:
+                self.discord.alert(alert_msg)
+            except Exception as exc:
+                logger.error("Security alert Discord falló: %s", exc)
+        self._emit(alert_msg)
