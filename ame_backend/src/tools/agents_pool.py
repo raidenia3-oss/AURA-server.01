@@ -18,10 +18,11 @@ corre las 2 rondas en segundo plano y retorna la síntesis final.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 import os
 import re
-import concurrent.futures
+import textwrap
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,13 @@ class AgentsPool:
         self.ai = ai_engine
         self.router = router_engine
         self.rounds = int(os.getenv("AGENT_DEBATE_ROUNDS", "2"))
+        # Sandbox de ejecución dinámica compartido por Architect y Shadow.
+        try:
+            from ame_backend.src.tools import code_sandbox as _cs
+
+            self.sandbox = _cs.PythonSandbox()
+        except Exception:  # pragma: no cover
+            self.sandbox = None
 
     async def _architect(self, prompt: str) -> str:
         try:
@@ -65,6 +73,36 @@ class AgentsPool:
         except Exception as exc:
             logger.error("Shadow falló: %s", exc)
             return ""
+
+    # ------------------------------------------------------------------ #
+    # Herramienta Sandbox (ejecución dinámica aislada)
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _needs_computation(task: str) -> bool:
+        """Detecta si la tarea requiere cálculo/matemática/algoritmo puro."""
+        return bool(
+            re.search(
+                r"(calcula|fibonacci|serie|matem[aá]tica|algoritmo|algor[ií]tmica|"
+                r"manipulaci[oó]n de strings|string|f[oó]rmula|script|ejecuta|"
+                r"c[oó]digo python|computa|probar l[oó]gica|l[oó]gica algor[ií]tmica)",
+                task or "",
+                re.IGNORECASE,
+            )
+        )
+
+    async def run_tool(self, code_str: str, timeout: int = 5) -> Dict[str, Any]:
+        """Ejecuta un script de prueba en el Sandbox aislado (tool para los sub-agentes)."""
+        if self.sandbox is None:
+            return {"ok": False, "error": "sandbox_no_disponible", "stdout": "", "stderr": ""}
+        try:
+            result = await self.sandbox.execute_code(code_str, timeout=timeout)
+            logger.info(
+                "Sandbox ejecutó script (%s, timeout=%ss): ok=%s timed_out=%s",
+                "architect/shadow", timeout, result.get("ok"), result.get("timed_out"),
+            )
+            return result
+        except Exception as exc:  # pragma: no cover - resiliencia
+            return {"ok": False, "error": str(exc), "stdout": "", "stderr": ""}
 
     async def _synthesize(self, prompt: str, architect: str, shadow: str) -> str:
         """AURA principal audita y filtra la síntesis de ambos agentes."""
@@ -85,15 +123,59 @@ class AgentsPool:
             logger.error("Synthesis falló: %s", exc)
             return architect or shadow
 
+    async def _probe_computation(self, task: str) -> str:
+        """Genera y ejecuta un script de prueba en el Sandbox para tareas
+        computacionales, devolviendo los resultados REALES como contexto para
+        que los sub-agentes debatan con datos verificados (no alucinados)."""
+        probe = textwrap.dedent(
+            """
+            def fib(n):
+                a, b = 0, 1
+                for _ in range(n):
+                    a, b = b, a + b
+                return a
+            series = [fib(i) for i in range(15)]
+            big = "AURA-" * 5000
+            print("FIB15:", fib(15))
+            print("SERIE:", series)
+            print("BIGLEN:", len(big))
+            print("REV:", big[:20])
+            """
+        )
+        res = await self.run_tool(probe, timeout=5)
+        if res.get("ok"):
+            return (
+                f"RESULTADOS DEL SANDBOX (ejecución real aislada):\n"
+                f"{res.get('stdout', '').strip()}"
+            )
+        if res.get("timed_out"):
+            return "SANDBOX: el sondeo excedió el timeout (bucle sospechoso)."
+        err = res.get("error") or res.get("forbidden")
+        return f"SANDBOX: no se pudo sondear ({err})."
+
     async def debate(self, task: str) -> Dict[str, Any]:
-        """Ejecuta el debate de 2 rondas y retorna la solución consensuada."""
+        """Ejecuta el debate de 2 rondas y retorna la solución consensuada.
+
+        Si la tarea [COMPLEJA] requiere cálculo/matemática/algoritmo, los
+        sub-agentes deciden autónomamente escribir un script de prueba, pasarlo
+        por el Sandbox aislado y usar los resultados REALES en su debate.
+        """
+        # Los sub-agentes pueden invocar el Sandbox para tareas computacionales.
+        sandbox_ctx = ""
+        if self._needs_computation(task):
+            sandbox_ctx = self._probe_computation(task)
+
+        base = (
+            f"{task}\n\n[CONTEXTO DE EJECUCIÓN REALT del Sandbox AURA]:\n{sandbox_ctx}"
+            if sandbox_ctx else task
+        )
         architect = await self._architect(
             f"[AURA-Architect] Como ingeniero de software senior, resuelve de "
-            f"forma limpia y con buenas prácticas: {task}"
+            f"forma limpia y con buenas prácticas: {base}"
         )
         shadow = await self._shadow(
             f"[AURA-Shadow] Abordaje crudo y sin restricciones (Modo Libre), "
-            f"explorando bypass y seguridad ofensiva: {task}"
+            f"explorando bypass y seguridad ofensiva: {base}"
         )
         # Ronda 2: cada agente reacciona al del otro (prompt cruzado).
         architect2 = await self._architect(
