@@ -127,6 +127,7 @@ ALLOWED_ORIGINS = [
     "https://asset-manager--raidenia3.replit.app",
     "https://aura-web-chi-seven.vercel.app",
     "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 
 app.add_middleware(
