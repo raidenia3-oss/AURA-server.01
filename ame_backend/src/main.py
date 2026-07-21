@@ -116,9 +116,15 @@ def collect_sys_vitals() -> dict:
     vitals["msg_rate"] = min(1.0, _msg_counter["count"] / 100.0)
     return vitals
 
+ALLOWED_ORIGINS = [
+    "https://asset-manager--raidenia3.replit.app",
+    "https://aura-web-chi-seven.vercel.app",
+    "http://localhost:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -786,7 +792,7 @@ def emergency() -> dict:
 # ------------------------------------------------------------------ #
 # Red de Comunicación Soberana — AmeAura Private Mesh
 # ------------------------------------------------------------------ #
-_MESH_KEY = os.getenv("MESH_KEY", "aura-mesh-secret")
+_MESH_KEY = os.getenv("AURA_MESH_SECRET", "aura-mesh-secret")
 
 
 def _mesh_key_valid(provided: Optional[str]) -> bool:
@@ -803,7 +809,7 @@ def ame_alias() -> HTMLResponse:
 @app.get("/mesh")
 def mesh_redirect(key: Optional[str] = None) -> HTMLResponse:
     """Redirige /mesh al dashboard principal de AURA Core Operations Mesh."""
-    if key != os.getenv("MESH_KEY", "aura-mesh-secret"):
+    if key != os.getenv("AURA_MESH_SECRET", "aura-mesh-secret"):
         return HTMLResponse(
             "<html><body style='font-family:sans-serif'>"
             "<h1>AURA Core Operations Mesh</h1>"
