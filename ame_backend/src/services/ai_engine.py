@@ -64,6 +64,12 @@ class AIEngine:
                 "api_key": None,
                 "timeout": int(os.getenv("LOCAL_LFM_TIMEOUT", "120")),
             },
+            "huggingface": {
+                "url": "https://api-inference.huggingface.co/models",
+                "model": os.getenv("HF_MODEL", "google/gemma-2-9b-it"),
+                "api_key": os.getenv("HF_TOKEN"),
+                "timeout": int(os.getenv("HF_TIMEOUT", "60")),
+            },
         }
         self.preference = os.getenv(
             "AI_PROVIDER_PREFERENCE", "auto"
@@ -141,6 +147,18 @@ class AIEngine:
                 )
             except Exception as e:
                 last_error = e
+                status = getattr(e, "response", None) and getattr(e.response, "status_code", None)
+                if status in (429, 500, 502, 503, 504):
+                    try:
+                        return self._call_provider(
+                            "huggingface",
+                            prompt,
+                            effective_context,
+                            model_override,
+                        )
+                    except Exception as hf_exc:
+                        logger.error("Fallback Hugging Face falló: %s", hf_exc)
+                        last_error = hf_exc
         return {
             "text": f"AI error: {last_error}",
             "error": str(last_error) if last_error else "Unknown error",
@@ -225,6 +243,8 @@ class AIEngine:
                 f"{cfg['url']}/models/{model_override or cfg['model']}:generateContent?key={cfg['api_key']}",
                 {"contents": self._contents(prompt, context)},
             )
+        if provider == "huggingface":
+            return self._call_huggingface(cfg, prompt, context, model_override)
         if provider in ("groq", "openrouter", "lm_studio", "local_lfm"):
             return self._call_openai_compat(
                 f"{cfg['url']}/chat/completions",
@@ -250,6 +270,33 @@ class AIEngine:
         else:
             text = candidates[0].get("message", {}).get("content", "")
         return {"text": text, "raw": data}
+
+    def _call_huggingface(
+        self,
+        cfg: Dict[str, Any],
+        prompt: str,
+        context: Optional[str],
+        model_override: Optional[str],
+    ) -> Dict[str, Any]:
+        url = f"{cfg['url']}/{model_override or cfg['model']}"
+        payload = {
+            "inputs": f"{context}\n\n{prompt}" if context else prompt,
+            "parameters": {"max_new_tokens": 1024, "temperature": 0.7, "return_full_text": False},
+        }
+        headers = {"Content-Type": "application/json"}
+        api_key = cfg.get("api_key")
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        r = self.session.post(url, json=payload, headers=headers, timeout=cfg["timeout"])
+        r.raise_for_status()
+        data = r.json()
+        if isinstance(data, list) and data:
+            text = data[0].get("generated_text", "")
+        elif isinstance(data, dict):
+            text = data.get("generated_text", "") or data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        else:
+            text = ""
+        return {"text": text.strip(), "provider": "huggingface"}
 
     def _headers_for_url(self, url: str) -> dict:
         if "/generateContent" in url:
