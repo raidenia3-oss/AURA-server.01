@@ -12,8 +12,8 @@ export default function Home() {
       }}
     >
       <div>
-        <h1 style={{ fontSize: 24 }}>AURA — Recursos de IA</h1>
-        <p>Accede a /ame para el dashboard AME.</p>
+        <h1 style={{ fontSize: 24 }}>AURA Core Operations Mesh</h1>
+        <p>Sistema operativo autónomo — AURA v4.0</p>
       </div>
     </div>
   );

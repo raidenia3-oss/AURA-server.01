@@ -18,7 +18,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import FileResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -47,6 +47,7 @@ from ame_backend.src.tools import agents_pool as agents_pool_mod
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AURA Backend")
+app.allowed_origins = ["*"]
 ai = AIEngine()
 router_engine = MultiModelRouter(ai)
 task_mgr = TaskManager()
@@ -152,7 +153,7 @@ def dashboard() -> str:
     except FileNotFoundError:
         return (
             "<html><body style='font-family:sans-serif'>"
-            "<h1>AURA Dashboard</h1>"
+            "<h1>AURA Core Operations Mesh</h1>"
             "<p>No se encontro dashboard_local.html en la raiz del proyecto.</p>"
             "</body></html>"
         )
@@ -794,25 +795,23 @@ def _mesh_key_valid(provided: Optional[str]) -> bool:
     return provided == _MESH_KEY
 
 
+@app.get("/ame")
+def ame_alias() -> HTMLResponse:
+    return RedirectResponse(url="/dashboard", status_code=307)
+
+
 @app.get("/mesh")
-def mesh_mobile_page(key: Optional[str] = None) -> HTMLResponse:
-    """Sirve la interfaz móvil ultra-ligera de la Red Privada (ciberpunk)."""
+def mesh_redirect(key: Optional[str] = None) -> HTMLResponse:
+    """Redirige /mesh al dashboard principal de AURA Core Operations Mesh."""
     if key != os.getenv("MESH_KEY", "aura-mesh-secret"):
         return HTMLResponse(
             "<html><body style='font-family:sans-serif'>"
-            "<h1>Acceso denegado</h1><p>Clave de la mesh inválida.</p>"
+            "<h1>AURA Core Operations Mesh</h1>"
+            "<p>Acceso denegado: clave de la mesh inválida.</p>"
             "</body></html>",
             status_code=401,
         )
-    html_path = _STATIC_DIR / "mesh_mobile.html"
-    try:
-        return HTMLResponse(html_path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return HTMLResponse(
-            "<html><body style='font-family:sans-serif'>"
-            "<h1>AmeAura Private Mesh</h1><p>mesh_mobile.html no encontrado.</p>"
-            "</body></html>"
-        )
+    return RedirectResponse(url="/dashboard", status_code=307)
 
 
 @app.websocket("/api/mesh/stream")
