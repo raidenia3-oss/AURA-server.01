@@ -16,6 +16,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+try:
+    from dotenv import load_dotenv
+    for _env_path in ("backend/.env.local", ".env.local", "ame_backend/.env.local"):
+        load_dotenv(_env_path)
+except Exception:
+    pass
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse

@@ -298,6 +298,13 @@ class AIEngine:
             text = ""
         return {"text": text.strip(), "provider": "huggingface"}
 
+    def query_hf_inference(
+        self, prompt: str, model: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Consulta la API de Inferencia Serverless de Hugging Face."""
+        cfg = self.providers["huggingface"]
+        return self._call_huggingface(cfg, prompt, None, model)
+
     def _headers_for_url(self, url: str) -> dict:
         if "/generateContent" in url:
             return {"Content-Type": "application/json"}

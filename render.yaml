@@ -31,6 +31,8 @@ services:
         sync: false
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: HF_TOKEN
+        sync: false
       # --- Modo Libre: proveedores sin restricciones (API key secundaria) ---
       - key: OPENROUTER_FREE_KEY
         sync: false
